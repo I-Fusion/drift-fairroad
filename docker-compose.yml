@@ -1,0 +1,96 @@
+version: '3.8'
+
+services:
+  # Federated Learning Server
+  fl-server:
+    build: .
+    container_name: fl-server
+    environment:
+      - FL_ROLE=server
+      - FL_SERVER_HOST=0.0.0.0
+      - FL_SERVER_PORT=8080
+      - FL_NUM_CLIENTS=3
+      - FL_MIN_CLIENTS=2
+      - FL_AGGREGATION=fedavg
+      - FL_INPUT_SIZE=12
+      - FL_HIDDEN_SIZE=64
+      - FL_NUM_LAYERS=2
+    ports:
+      - "8080:8080"
+    networks:
+      - fl-network
+    volumes:
+      - ./checkpoints:/app/checkpoints
+
+  # Client 1
+  fl-client-1:
+    build: .
+    container_name: fl-client-1
+    environment:
+      - FL_ROLE=client
+      - FL_CLIENT_ID=client_1
+      - FL_SERVER_URL=http://fl-server:8080
+      - FL_GPS_FILE=/app/data/mission_2_wp_23_attack_add_wp_5_alt_0005_gps.csv
+      - FL_IMU_FILE=/app/data/mission_2_wp_23_attack_add_wp_5_alt_0005_imu.csv
+      - FL_WINDOW_SIZE=50
+      - FL_OVERLAP=25
+      - FL_WINDOWS_PER_ROUND=10
+      - FL_LEARNING_RATE=0.001
+      - FL_HIDDEN_SIZE=64
+      - FL_NUM_LAYERS=2
+    depends_on:
+      - fl-server
+    networks:
+      - fl-network
+    volumes:
+      - ./data:/app/data:ro
+
+  # Client 2
+  fl-client-2:
+    build: .
+    container_name: fl-client-2
+    environment:
+      - FL_ROLE=client
+      - FL_CLIENT_ID=client_2
+      - FL_SERVER_URL=http://fl-server:8080
+      - FL_GPS_FILE=/app/data/mission_2_wp_23_attack_add_wp_5_alt_0005_gps.csv
+      - FL_IMU_FILE=/app/data/mission_2_wp_23_attack_add_wp_5_alt_0005_imu.csv
+      - FL_WINDOW_SIZE=50
+      - FL_OVERLAP=25
+      - FL_WINDOWS_PER_ROUND=10
+      - FL_LEARNING_RATE=0.001
+      - FL_HIDDEN_SIZE=64
+      - FL_NUM_LAYERS=2
+    depends_on:
+      - fl-server
+    networks:
+      - fl-network
+    volumes:
+      - ./data:/app/data:ro
+
+  # Client 3
+  fl-client-3:
+    build: .
+    container_name: fl-client-3
+    environment:
+      - FL_ROLE=client
+      - FL_CLIENT_ID=client_3
+      - FL_SERVER_URL=http://fl-server:8080
+      - FL_GPS_FILE=/app/data/mission_2_wp_23_attack_add_wp_5_alt_0005_gps.csv
+      - FL_IMU_FILE=/app/data/mission_2_wp_23_attack_add_wp_5_alt_0005_imu.csv
+      - FL_WINDOW_SIZE=50
+      - FL_OVERLAP=25
+      - FL_WINDOWS_PER_ROUND=10
+      - FL_LEARNING_RATE=0.001
+      - FL_HIDDEN_SIZE=64
+      - FL_NUM_LAYERS=2
+    depends_on:
+      - fl-server
+    networks:
+      - fl-network
+    volumes:
+      - ./data:/app/data:ro
+
+networks:
+  fl-network:
+    driver: bridge
