@@ -29,8 +29,8 @@ MODEL_CONFIG = {
 # ============================================================================
 
 # Data file paths (will be used by all clients)
-GPS_FILE = 'data/mission_2_wp_23_attack_add_wp_5_alt_0005_gps.csv'
-IMU_FILE = 'data/mission_2_wp_23_attack_add_wp_5_alt_0005_imu.csv'
+GPS_FILE = 'data/waypoint_injection/mission_2_wp_23_attack_add_wp_5_alt_0005_gps.csv'
+IMU_FILE = 'data/waypoint_injection/mission_2_wp_23_attack_add_wp_5_alt_0005_imu.csv'
 
 # Features to use from data
 GPS_FEATURES = ['Lat', 'Lng', 'Alt', 'Spd', 'GCrs', 'VZ']
@@ -38,6 +38,11 @@ IMU_FEATURES = ['GyrX', 'GyrY', 'GyrZ', 'AccX', 'AccY', 'AccZ']
 
 # Timestamp column
 TIMESTAMP_COL = 'TimeUS'
+
+# Sampling strategy: 'downsample' or 'upsample'
+# 'downsample': IMU data downsampled to match GPS rate (default)
+# 'upsample': GPS data upsampled to match IMU rate
+SAMPLING_STRATEGY = 'downsample'
 
 # ============================================================================
 # WINDOW CONFIGURATION
@@ -54,7 +59,7 @@ WINDOWS_PER_ROUND = 10  # Windows to process before syncing with server
 
 # Server configuration
 SERVER_HOST = 'localhost'
-SERVER_PORT = 8080
+SERVER_PORT = 5544
 NUM_CLIENTS = 3
 MIN_CLIENTS = 2  # Minimum clients needed to start aggregation
 
@@ -73,8 +78,9 @@ BATCH_SIZE = 32
 # PATHS
 # ============================================================================
 
-# Output directory for checkpoints
+# Output directory for checkpoints and plots
 CHECKPOINT_DIR = 'checkpoints'
+PLOT_DIR = 'plots'
 
 # ============================================================================
 # COMPUTED PARAMETERS (Don't modify)
@@ -103,6 +109,7 @@ def print_config():
     print(f"  IMU File: {IMU_FILE}")
     print(f"  GPS Features: {', '.join(GPS_FEATURES)}")
     print(f"  IMU Features: {', '.join(IMU_FEATURES)}")
+    print(f"  Sampling Strategy: {SAMPLING_STRATEGY}")
     print(f"\nWINDOW:")
     print(f"  Window Size: {WINDOW_SIZE}")
     print(f"  Overlap: {OVERLAP}")

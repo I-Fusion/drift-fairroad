@@ -45,7 +45,8 @@ class FLClient:
             imu_file,
             gps_features=config.GPS_FEATURES,
             imu_features=config.IMU_FEATURES,
-            timestamp_col=config.TIMESTAMP_COL
+            timestamp_col=config.TIMESTAMP_COL,
+            sampling_strategy=config.SAMPLING_STRATEGY
         )
         self.X, self.y, self.num_features = preprocessor.preprocess(
             config.WINDOW_SIZE,
@@ -90,10 +91,10 @@ class FLClient:
             logger.error(f"Registration failed: {e}")
             return False
 
-    async def get_global_model(self, session: aiohttp.ClientSession) -> bool:
+    async def get_global_model(self, session: aiohttp.ClientSession, round_num: int = 0) -> bool:
         """Download global model from server."""
         url = f"{self.server_url}/get_model"
-        data = {"client_id": self.client_id}
+        data = {"client_id": self.client_id, "round": round_num}
 
         try:
             async with session.post(url, json=data) as response:
@@ -101,7 +102,7 @@ class FLClient:
                     weights_bytes = await response.read()
                     weights = pickle.loads(weights_bytes)
                     self.model.set_weights(weights)
-                    logger.info("Received global model")
+                    logger.info(f"Received global model for round {round_num}")
                     return True
                 return False
         except Exception as e:
@@ -179,8 +180,11 @@ class FLClient:
                 logger.info(f"Round {round_num}: Windows {self.current_window_idx}-{end_idx}")
 
                 # Get global model (skip first round)
+                # For round N, wait until previous round (N-1) is aggregated
+                # Server current_round will be N-1 after round N-1 aggregation completes
                 if round_num > 1:
-                    await self.get_global_model(session)
+                    # Request to wait until server.current_round >= round_num - 1
+                    await self.get_global_model(session, round_num - 1)
 
                 # Train
                 loss = self.train_on_windows(self.current_window_idx, end_idx)

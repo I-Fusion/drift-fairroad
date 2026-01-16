@@ -32,7 +32,8 @@ class DataPreprocessor:
         imu_file: str,
         gps_features: List[str] = None,
         imu_features: List[str] = None,
-        timestamp_col: str = 'TimeUS'
+        timestamp_col: str = 'TimeUS',
+        sampling_strategy: str = 'downsample'
     ):
         """
         Initialize data preprocessor.
@@ -43,10 +44,12 @@ class DataPreprocessor:
             gps_features: List of GPS feature column names to use
             imu_features: List of IMU feature column names to use
             timestamp_col: Name of timestamp column (default: 'TimeUS')
+            sampling_strategy: 'downsample' (IMU->GPS) or 'upsample' (GPS->IMU)
         """
         self.gps_file = gps_file
         self.imu_file = imu_file
         self.timestamp_col = timestamp_col
+        self.sampling_strategy = sampling_strategy
 
         # Default features from your data structure
         self.gps_features = gps_features or ['Lat', 'Lng', 'Alt', 'Spd', 'GCrs', 'VZ']
@@ -58,12 +61,13 @@ class DataPreprocessor:
         self.num_features = None
 
         logger.info(f"DataPreprocessor initialized")
+        logger.info(f"Sampling strategy: {self.sampling_strategy}")
         logger.info(f"GPS features: {self.gps_features}")
         logger.info(f"IMU features: {self.imu_features}")
 
     def load_and_merge_data(self) -> pd.DataFrame:
         """
-        Load GPS and IMU data, downsample IMU to GPS rate, and merge.
+        Load GPS and IMU data, apply sampling strategy, and merge.
 
         Returns:
             Merged dataframe with all features
@@ -91,17 +95,33 @@ class DataPreprocessor:
 
         logger.info(f"GPS samples: {len(gps_df)}, IMU samples: {len(imu_df)}")
 
-        # Downsample IMU to match GPS timestamps (nearest neighbor interpolation)
+        # Convert timestamps to numeric
         gps_df[self.timestamp_col] = pd.to_numeric(gps_df[self.timestamp_col])
         imu_df[self.timestamp_col] = pd.to_numeric(imu_df[self.timestamp_col])
 
-        # Merge on nearest timestamp
-        merged_df = pd.merge_asof(
-            gps_df[[self.timestamp_col] + self.gps_features],
-            imu_df[[self.timestamp_col] + self.imu_features],
-            on=self.timestamp_col,
-            direction='nearest'
-        )
+        # Apply sampling strategy
+        if self.sampling_strategy == 'downsample':
+            # Downsample IMU to match GPS rate (fewer samples)
+            logger.info("Downsampling IMU data to GPS rate")
+            merged_df = pd.merge_asof(
+                gps_df[[self.timestamp_col] + self.gps_features],
+                imu_df[[self.timestamp_col] + self.imu_features],
+                on=self.timestamp_col,
+                direction='nearest'
+            )
+        elif self.sampling_strategy == 'upsample':
+            # Upsample GPS to match IMU rate (more samples)
+            logger.info("Upsampling GPS data to IMU rate")
+            merged_df = pd.merge_asof(
+                imu_df[[self.timestamp_col] + self.imu_features],
+                gps_df[[self.timestamp_col] + self.gps_features],
+                on=self.timestamp_col,
+                direction='nearest'
+            )
+            # Reorder columns to match expected format
+            merged_df = merged_df[[self.timestamp_col] + self.gps_features + self.imu_features]
+        else:
+            raise ValueError(f"Invalid sampling_strategy: {self.sampling_strategy}. Use 'downsample' or 'upsample'")
 
         # Drop rows with missing values
         merged_df = merged_df.dropna().reset_index(drop=True)

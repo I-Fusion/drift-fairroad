@@ -10,7 +10,13 @@ import sys
 import os
 import signal
 import requests
+import glob
+import logging
 from config import *
+
+# Set up logging
+logging.basicConfig(level=logging.INFO, format='%(message)s')
+logger = logging.getLogger(__name__)
 
 # Track running processes
 processes = []
@@ -56,32 +62,49 @@ def monitor_training():
     """Monitor training progress by checking server status"""
     url = f"http://{SERVER_HOST}:{SERVER_PORT}/status"
     last_round = -1
+    rounds_without_change = 0
+    max_rounds_without_change = 30  # Exit if no progress for 30 checks
 
     print("\n" + "=" * 70)
     print("MONITORING TRAINING PROGRESS")
     print("=" * 70)
+    print("(Updates shown when rounds complete)\n")
 
     try:
-        while True:
-            time.sleep(5)
+        while rounds_without_change < max_rounds_without_change:
+            time.sleep(2)
             try:
                 response = requests.get(url, timeout=2)
                 if response.status_code == 200:
                     status = response.json()
                     current_round = status['current_round']
 
+                    # Only print when a new round completes
                     if current_round > last_round:
-                        print(f"\n📊 Round {current_round}:")
-                        print(f"   Registered: {status['registered_clients']}/{status['total_expected']}")
-                        print(f"   Ready: {status['ready_clients']}/{status['total_expected']}")
-                        print(f"   Strategy: {status['aggregation_strategy']}")
+                        print(f"✓ Round {current_round} complete - "
+                              f"Clients: {status['registered_clients']}/{status['total_expected']}, "
+                              f"Strategy: {status['aggregation_strategy']}")
                         last_round = current_round
+                        rounds_without_change = 0
+                    else:
+                        rounds_without_change += 1
 
             except:
-                pass
+                rounds_without_change += 1
 
     except KeyboardInterrupt:
         pass
+
+
+def cleanup_old_checkpoints():
+    """Delete old checkpoint files"""
+    if os.path.exists(CHECKPOINT_DIR):
+        pt_files = glob.glob(f"{CHECKPOINT_DIR}/*.pt")
+        if pt_files:
+            logger.info(f"Cleaning up {len(pt_files)} old checkpoint files...")
+            for pt_file in pt_files:
+                os.remove(pt_file)
+            logger.info("✓ Old checkpoints deleted")
 
 
 def main():
@@ -93,8 +116,12 @@ def main():
     # Print configuration
     print_config()
 
-    # Create checkpoint directory
+    # Clean up old checkpoints
+    cleanup_old_checkpoints()
+
+    # Create directories
     os.makedirs(CHECKPOINT_DIR, exist_ok=True)
+    os.makedirs(PLOT_DIR, exist_ok=True)
 
     print("\n" + "=" * 70)
     print("STARTING FEDERATED LEARNING SYSTEM")
@@ -162,6 +189,19 @@ def main():
         proc.wait()
         print(f"✓ Client {i} completed")
 
+    # Give server time to save final checkpoint
+    time.sleep(2)
+
+    # Request server to save loss plot
+    try:
+        print("\n📊 Generating loss plot...")
+        response = requests.post(f"http://{SERVER_HOST}:{SERVER_PORT}/save_plot", timeout=10)
+        if response.status_code == 200:
+            result = response.json()
+            print(f"✓ Loss plot saved: {result['plot_path']}")
+    except Exception as e:
+        print(f"Warning: Could not generate plot: {e}")
+
     print("\n" + "=" * 70)
     print("TRAINING COMPLETED!")
     print("=" * 70)
@@ -173,7 +213,13 @@ def main():
         for ckpt in sorted(checkpoints):
             print(f"   {CHECKPOINT_DIR}/{ckpt}")
 
-    print(f"\n✓ Final model saved in: {CHECKPOINT_DIR}/")
+    # Print plot location
+    plot_path = f"{PLOT_DIR}/training_loss.png"
+    if os.path.exists(plot_path):
+        print(f"\n📈 Training Loss Plot:")
+        print(f"   {plot_path}")
+
+    print(f"\n✓ Training artifacts saved successfully!")
 
     # Cleanup
     cleanup_processes()

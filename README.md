@@ -1,52 +1,36 @@
-# Federated Learning System for GPS+IMU Sensor Fusion
+# Federated Learning System
 
-Production-ready Federated Learning system for training time series models on GPS and IMU sensor data. Features centralized configuration, modular design, and single-command execution.
+Federated Learning system for training time series models on GPS and IMU sensor data and payload based data. 
 
 ## 🚀 Quick Start
 
 ```bash
-# 1. Place your GPS and IMU CSV files in data/ folder
+# 1. Set up virtual environment (recommended)
+python -m venv fl_env
+source fl_env/bin/activate  # On Windows: fl_env\Scripts\activate
+
+# 2. Install dependencies
+pip install -r requirements.txt
+
+# 3. Place the data CSV files in data/ folder
 ls data/
 
-# 2. Configure parameters (optional - defaults are set)
+# 4. Configure parameters (optional - defaults are set)
 nano config.py
 
-# 3. Run the entire FL system
+# 5. Run the entire FL system
 python run_fl_system.py
 ```
 
-That's it! The system will:
+The system will:
 - Start 1 server + N clients automatically
-- Load and preprocess GPS+IMU data
+- Load and preprocess data with configurable sampling strategy
 - Train using sliding windows (single-pass)
 - Sync periodically with server
+- Track and plot loss for each client and average loss
 - Print metrics for each round
-- Save checkpoints automatically
+- Save checkpoints and loss plots automatically
 
-## 📋 Table of Contents
-
-1. [Features](#features)
-2. [Project Structure](#project-structure)
-3. [Configuration](#configuration)
-4. [Running the System](#running-the-system)
-5. [Creating Custom Models](#creating-custom-models)
-6. [Data Format](#data-format)
-7. [Output and Checkpoints](#output-and-checkpoints)
-
----
-
-## Features
-
-✅ **Single Configuration File** (`config.py`) - Set all parameters in one place
-✅ **One-Command Execution** - Run entire FL system with `python run_fl_system.py`
-✅ **Modular Model Selection** - Easy to swap models
-✅ **GPS+IMU Data Fusion** - Automatic downsampling and merging
-✅ **Sliding Windows** - Configurable size and overlap
-✅ **Single-Pass Training** - Simulates real-time data ingestion
-✅ **Multiple Aggregation** - FedAvg, FedAvgM, Weighted
-✅ **Auto-Checkpointing** - Models saved after each round
-
----
 
 ## Project Structure
 
@@ -71,19 +55,44 @@ FL/
 │   └── your_imu.csv
 │
 ├── checkpoints/               # Auto-created for model checkpoints
+├── plots/                     # Auto-created for loss plots
 │
 └── requirements.txt           # Python dependencies
 ```
-
-### Documentation Files (Optional)
-
-```
-├── README.md                  # This file
-├── PROJECT_FILES.md           # Detailed file listing
-└── ARCHITECTURE.md            # Technical details
-```
-
 ---
+
+
+## Installation
+
+### Method 1: With Virtual Environment (Recommended)
+
+```bash
+# Create virtual environment
+python -m venv fl_env
+
+# Activate virtual environment
+# On macOS/Linux:
+source fl_env/bin/activate
+# On Windows:
+fl_env\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# When done, deactivate
+deactivate
+```
+
+### Method 2: Global Installation
+
+```bash
+# Install dependencies globally
+pip install -r requirements.txt
+
+# Or manually
+pip install torch numpy aiohttp pandas requests matplotlib
+```
+
 
 ## Configuration
 
@@ -119,6 +128,11 @@ IMU_FILE = 'data/your_imu.csv'
 GPS_FEATURES = ['Lat', 'Lng', 'Alt', 'Spd', 'GCrs', 'VZ']
 IMU_FEATURES = ['GyrX', 'GyrY', 'GyrZ', 'AccX', 'AccY', 'AccZ']
 
+# Sampling strategy: 'downsample' or 'upsample'
+# 'downsample': IMU data downsampled to match GPS rate (fewer samples, default)
+# 'upsample': GPS data upsampled to match IMU rate (more samples)
+SAMPLING_STRATEGY = 'downsample'
+
 # ============================================================================
 # WINDOW CONFIGURATION
 # ============================================================================
@@ -151,18 +165,31 @@ BATCH_SIZE = 32
 # ============================================================================
 
 CHECKPOINT_DIR = 'checkpoints'
+PLOT_DIR = 'plots'
 ```
 
 ### Parameter Guide
 
 | Parameter | What It Controls | Recommended Values |
 |-----------|-----------------|-------------------|
+| `SAMPLING_STRATEGY` | Data fusion strategy ('downsample' or 'upsample') | 'downsample' (default) |
 | `WINDOW_SIZE` | How many timesteps in each training window | 30-100 |
 | `OVERLAP` | How many timesteps overlap between windows | 50-75% of window_size |
 | `WINDOWS_PER_ROUND` | How many windows before syncing with server | 5-20 |
 | `NUM_CLIENTS` | Number of FL clients to run | 2-5 |
+| `MIN_CLIENTS` | Minimum clients required before training starts | 2-NUM_CLIENTS |
 | `hidden_size` | Model capacity (LSTM units) | 32-128 |
 | `num_layers` | Model depth (LSTM layers) | 2-3 |
+
+### Sampling Strategy for GPS+IMU data
+
+**Downsample (default):**
+- IMU data is downsampled to match the slower GPS sampling rate
+- Example: GPS @ 5 Hz, IMU @ 100 Hz → Output @ 5 Hz
+
+**Upsample:**
+- GPS data is upsampled to match the faster IMU sampling rate
+- Example: GPS @ 5 Hz, IMU @ 100 Hz → Output @ 100 Hz
 
 ---
 
@@ -192,9 +219,9 @@ python fl_server.py
 
 **Terminal 2-4 - Clients:**
 ```bash
-python fl_client.py --client-id client_1 --gps-file data/your_gps.csv --imu-file data/your_imu.csv --server-url http://localhost:8080
-python fl_client.py --client-id client_2 --gps-file data/your_gps.csv --imu-file data/your_imu.csv --server-url http://localhost:8080
-python fl_client.py --client-id client_3 --gps-file data/your_gps.csv --imu-file data/your_imu.csv --server-url http://localhost:8080
+python fl_client.py --client-id client_1 --gps-file data/your_gps.csv --imu-file data/your_imu.csv --server-url http://localhost:5544
+python fl_client.py --client-id client_2 --gps-file data/your_gps.csv --imu-file data/your_imu.csv --server-url http://localhost:5544
+python fl_client.py --client-id client_3 --gps-file data/your_gps.csv --imu-file data/your_imu.csv --server-url http://localhost:5544
 ```
 
 ---
@@ -248,7 +275,7 @@ MODEL_CLASS = 'MyCustomModel'        # Your model class
 python run_fl_system.py
 ```
 
-That's it! Your custom model is now being used.
+This should run the custom model for the FL training.
 
 ---
 
@@ -296,12 +323,16 @@ Must include these columns:
 The system automatically:
 1. Loads GPS and IMU CSV files
 2. Filters IMU data (keeps sensor I=0)
-3. Downsamples IMU to match GPS timestamps (nearest neighbor)
-4. Merges on timestamp
+3. Applies sampling strategy (downsample or upsample) to align timestamps
+4. Merges on timestamp using nearest neighbor matching
 5. Normalizes using z-score (mean=0, std=1)
 6. Creates sliding windows with overlap
 
 **Total features:** 6 GPS + 6 IMU = 12 features
+
+**Sampling Strategy:**
+- **Downsample**: IMU → GPS rate (fewer, cleaner samples)
+- **Upsample**: GPS → IMU rate (more samples, interpolated GPS)
 
 ---
 
@@ -361,7 +392,18 @@ TRAINING COMPLETED!
    checkpoints/server_round_4.pt
    checkpoints/server_round_5.pt
 
-✓ Final model saved in: checkpoints/
+📈 Training Loss Plot:
+   plots/training_loss.png
+
+✓ Training artifacts saved successfully!
+```
+
+### Loss Tracking and Plotting
+
+The system automatically tracks loss from each client after every training round. Each client's loss curve is recorded and plotted along with an average of the overall loss.
+
+```
+plots/training_loss.png
 ```
 
 ### Loading Checkpoints
@@ -380,67 +422,18 @@ model.load_state_dict(checkpoint['model_state_dict'])
 print(f"Loaded model from round {checkpoint['round']}")
 ```
 
----
+### Checkpoint Cleanup
 
-## Troubleshooting
+Before each training run, the system automatically:
+- Checks for existing `.pt` files in `checkpoints/` directory
+- Removes all old checkpoint files
+- Logs the number of files cleaned up
 
-### "Not enough data for windowing"
-Reduce `WINDOW_SIZE` in `config.py`
+This prevents:
+- Confusion between old and new checkpoints
+- Disk space issues from accumulating checkpoints
+- Accidental loading of outdated models
 
-### "Port 8080 already in use"
-Change `SERVER_PORT` in `config.py` or kill existing process:
-```bash
-lsof -ti:8080 | xargs kill -9
-```
-
-### "Module not found: config"
-Run from the FL directory:
-```bash
-cd FL
-python run_fl_system.py
-```
-
-### "File not found: data/..."
-Check your GPS/IMU files are in `data/` folder and update paths in `config.py`
+To disable cleanup, comment out the `cleanup_old_checkpoints()` call in [run_fl_system.py](FL/run_fl_system.py:110).
 
 ---
-
-## Installation
-
-```bash
-# Install dependencies
-pip install -r requirements.txt
-
-# Or manually
-pip install torch numpy aiohttp pandas requests
-```
-
----
-
-## Summary
-
-### To Run the System:
-1. Edit `config.py` (set data files, parameters)
-2. Run `python run_fl_system.py`
-3. Watch training progress
-4. Checkpoints saved in `checkpoints/`
-
-### To Use Custom Model:
-1. Create `models/your_model.py`
-2. Update `MODEL_PATH` and `MODEL_CLASS` in `config.py`
-3. Run `python run_fl_system.py`
-
-### Essential Files for Deployment:
-- `config.py`
-- `run_fl_system.py`
-- `fl_client.py`
-- `fl_server.py`
-- `data_preprocessing.py`
-- `aggregation.py`
-- `models/lstm_model.py`
-- `requirements.txt`
-- Your data files in `data/`
-
----
-
-**That's it! Simple, modular, and production-ready.** 🚀
