@@ -1,9 +1,9 @@
 """
-Federated Learning Server with Packet Support
+Federated Learning Server for Classification Task
 
 Coordinates training and aggregates model updates.
-Compatible with both fl_client.py and fl_client_with_packets.py.
-Handles both supervised learning (classification) and time series prediction (regression).
+Compatible with both fl_client.py and fl_client_classification.py.
+Handles both classification and time series prediction (regression).
 """
 import asyncio
 import pickle
