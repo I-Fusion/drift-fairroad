@@ -18,8 +18,8 @@ import matplotlib.pyplot as plt
 from typing import Optional, Dict, Set
 
 from aggregation import FederatedAggregator
-import config as config
-from config import *
+import config_classification as config
+from config_classification import *
 
 logging.basicConfig(
     level=logging.INFO,
