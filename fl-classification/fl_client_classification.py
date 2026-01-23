@@ -19,7 +19,7 @@ import numpy as np
 from typing import Optional
 
 from data_preprocessing_classification import DataPreprocessorClassification
-import config
+import config_classification as config
 
 logging.basicConfig(
     level=logging.INFO,
