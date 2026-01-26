@@ -525,7 +525,42 @@ class FLClientClassification:
             import traceback
             traceback.print_exc()
             return False
+            
+    def save_checkpoint(self, round_num: int, loss: float):
+        """Save client model checkpoint."""
+        try:
+            checkpoint_dir = getattr(config, 'CHECKPOINT_DIR', 'checkpoints')
+            os.makedirs(checkpoint_dir, exist_ok=True)
+            
+            # Create client-specific checkpoint directory
+            client_checkpoint_dir = os.path.join(checkpoint_dir, 'clients')
+            os.makedirs(client_checkpoint_dir, exist_ok=True)
+            
+            checkpoint_path = os.path.join(
+                client_checkpoint_dir, 
+                f"{self.client_id}_round_{round_num}.pt"
+            )
+            
+            checkpoint = {
+                "round": round_num,
+                "client_id": self.client_id,
+                "model_state_dict": self.model.state_dict(),
+                "loss": loss,
+                "learning_mode": "classification" if self.is_supervised else "regression",
+                "output_size": self.output_size,
+                "input_size": self.num_features,
+                "current_window_idx": self.current_window_idx,
+                "total_windows": self.total_windows
+            }
+            
+            torch.save(checkpoint, checkpoint_path)
+            logger.info(f"Client checkpoint saved: {checkpoint_path}")
+            print(f"[DEBUG {self.client_id}] Checkpoint saved: {checkpoint_path}")
+        except Exception as e:
+            logger.warning(f"Failed to save client checkpoint: {e}")
+            print(f"[DEBUG {self.client_id}] Warning: Failed to save checkpoint: {e}")
 
+    
     async def run_federated_learning(self):
         """Run FL training."""
         #print(f"[DEBUG {self.client_id}] Starting run_federated_learning()...")
@@ -618,6 +653,9 @@ class FLClientClassification:
                 consecutive_failures = 0  # Reset on success
                 #print(f"[DEBUG {self.client_id}] Update submitted successfully")
 
+                # Save client checkpoint after training
+                self.save_checkpoint(round_num, loss)
+                
                 self.current_window_idx = end_idx
                 #print(f"[DEBUG {self.client_id}] Round {round_num} complete. Progress: {self.current_window_idx}/{self.total_windows} windows")
                 logger.info(f"Round {round_num} complete. Progress: {self.current_window_idx}/{self.total_windows} windows")
