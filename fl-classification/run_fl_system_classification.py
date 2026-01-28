@@ -19,8 +19,21 @@ import logging
 import argparse
 import threading
 from typing import Optional
-import config_classification as config
-from config_classification import *
+#import config_classification as config
+#from config_classification import *
+
+from typing import Optional, TYPE_CHECKING
+import importlib
+
+if TYPE_CHECKING:
+    # Hint to type checkers so that symbols like SERVER_HOST, SERVER_PORT,
+    # CHECKPOINT_DIR, etc. are known at analysis time. At runtime the actual
+    # config module is selected dynamically in main().
+    from config_packets_only import *  # type: ignore[import,unused-wildcard-import]
+
+# Global handle to the active config module; will be set in main() based on
+# the --config argument (defaults to "config_packets_only").
+config = None
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(message)s')
@@ -403,6 +416,14 @@ def main():
         default=None,
         help='Labeled packet CSV file (optional, can use data-dir for client-specific files)'
     )
+
+    parser.add_argument(
+        '--config',
+        type=str,
+        default='config_classification',
+        help='Config module to use (e.g., config, config_classification)'
+    )
+    
     parser.add_argument(
         '--use-labels',
         action='store_true',
@@ -422,6 +443,22 @@ def main():
         help='Model output size (None = auto-detect)'
     )
     args = parser.parse_args()
+
+    # ------------------------------------------------------------------
+    # Load selected config module and expose its UPPERCASE attributes
+    # globally so existing code (SERVER_HOST, SERVER_PORT, etc.) works.
+    # ------------------------------------------------------------------
+    global config
+    config_module_name = args.config
+    try:
+        config = importlib.import_module(config_module_name)
+    except ImportError as e:
+        print(f"[ERROR] Could not import config module '{config_module_name}': {e}")
+        sys.exit(1)
+
+    for _name, _value in vars(config).items():
+        if _name.isupper():
+            globals()[_name] = _value
 
     # Register signal handler
     signal.signal(signal.SIGINT, signal_handler)
@@ -455,8 +492,9 @@ def main():
         if input_size == 0:
             input_size = None  # Let server auto-detect
 
-    # Print configuration
-    print_config()
+    # Print configuration from the selected config module (if available)
+    if hasattr(config, "print_config"):
+        config.print_config()
 
     # Print additional configuration
     print("\n" + "=" * 70)
@@ -507,12 +545,17 @@ def main():
     if input_size:
         server_cmd.extend(['--input-size', str(input_size)])
 
+    # Ensure server picks up the same config module
+    server_env = os.environ.copy()
+    server_env["FL_CONFIG_MODULE"] = config_module_name
+    
     server_proc = subprocess.Popen(
         server_cmd,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         universal_newlines=True,
-        bufsize=1
+        bufsize=1,
+        env=server_env
     )
     processes.append(server_proc)
     
@@ -571,12 +614,17 @@ def main():
         if args.data_dir:
             client_cmd.extend(['--data-dir', args.data_dir])
 
+        # Ensure client picks up the same config module
+        client_env = os.environ.copy()
+        client_env["FL_CONFIG_MODULE"] = config_module_name
+
         client_proc = subprocess.Popen(
             client_cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             universal_newlines=True,
-            bufsize=1
+            bufsize=1,
+            env=client_env
         )
         processes.append(client_proc)
         
