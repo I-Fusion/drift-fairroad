@@ -44,7 +44,7 @@ if TYPE_CHECKING:  # pragma: no cover - for static analysis only
     from config_classification import *  # type: ignore[import,unused-wildcard-import]
 
 config = None  # Will be set in main()
-from data_preprocessing_with_packets import DataPreprocessorWithPackets
+from fl-classification.data_preprocessing_classification import DataPreprocessorClassification
 import logging
 
 # Set up logging
@@ -216,7 +216,7 @@ class FLEvaluator:
                 try:
                     # Determine file type and create appropriate preprocessor
                     if 'packet' in client_file.lower():
-                        preprocessor = DataPreprocessorWithPackets(
+                        preprocessor = DataPreprocessorClassification(
                             packet_file=client_file,
                             packet_features=config.PACKET_FEATURES,
                             packet_timestamp_col=config.PACKET_TIMESTAMP_COL,
@@ -232,7 +232,7 @@ class FLEvaluator:
                         gps_file = gps_file if os.path.exists(gps_file) else None
                         imu_file = imu_file if os.path.exists(imu_file) else None
                         
-                        preprocessor = DataPreprocessorWithPackets(
+                        preprocessor = DataPreprocessorClassification(
                             gps_file=gps_file,
                             imu_file=imu_file,
                             gps_features=getattr(config, 'GPS_FEATURES', None),
@@ -285,7 +285,7 @@ class FLEvaluator:
                 try:
                     client_id = Path(client_file).stem
                     if 'packet' in client_file.lower():
-                        preprocessor = DataPreprocessorWithPackets(
+                        preprocessor = DataPreprocessorClassification(
                             packet_file=client_file,
                             packet_features=config.PACKET_FEATURES,
                             packet_timestamp_col=config.PACKET_TIMESTAMP_COL,
@@ -299,7 +299,7 @@ class FLEvaluator:
                         gps_file = gps_file if os.path.exists(gps_file) else None
                         imu_file = imu_file if os.path.exists(imu_file) else None
                         
-                        preprocessor = DataPreprocessorWithPackets(
+                        preprocessor = DataPreprocessorClassification(
                             gps_file=gps_file,
                             imu_file=imu_file,
                             gps_features=getattr(config, 'GPS_FEATURES', None),
@@ -1608,3 +1608,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
