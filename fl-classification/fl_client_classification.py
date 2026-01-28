@@ -194,6 +194,10 @@ class FLClientClassification:
             # Time series prediction: output size = num_features
             output_size = self.num_features
 
+        # Store sizes on the instance for later use (e.g., checkpoint metadata)
+        self.output_size = int(output_size)
+        self.input_size = int(self.num_features)
+        
         # Load model dynamically from config
         #print(f"[DEBUG {client_id}] Loading model from {config.MODEL_PATH}.{config.MODEL_CLASS}...")
         logger.info(f"Loading model from {config.MODEL_PATH}.{config.MODEL_CLASS}")
