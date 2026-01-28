@@ -11,8 +11,8 @@ It supports:
 - Analyzing convergence and generalization
 
 Usage:
-    python evaluate_fl_system.py --checkpoint-dir checkpoints --data-dir data/prepared_clients --task classification
-    python evaluate_fl_system.py --checkpoint-dir checkpoints --data-dir data/prepared_clients --task regression
+    python evaluate_fl_system.py --checkpoint-dir checkpoints --data-dir data/prepared_clients --task classification --config config_classification
+    python evaluate_fl_system.py --checkpoint-dir checkpoints --data-dir data/prepared_clients --task regression --config config_regression
 """
 
 import os
@@ -1608,4 +1608,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
