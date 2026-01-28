@@ -6,7 +6,9 @@ This script runs the entire FL system with support for:
 - Time series prediction using GPS and IMU data
 
 Supports client-specific data files from prepare_fl_data_for_run_fl.py.
-Simply run: python run_fl_system_classification.py
+Sample usage at the project root directory: 
+[1] python .\fl-classification\run_fl_system_classification.py --data-dir .\data\train\packets\ --config config_classification --learning-mode classification
+[2] python .\fl-classification\run_fl_system_classification.py --data-dir .\data\train\gps-imu\ --config config_regression --learning-mode regression
 """
 import subprocess
 import time
@@ -526,11 +528,15 @@ def main():
     print("STARTING FEDERATED LEARNING SYSTEM")
     print("=" * 70)
 
+    # Get the directory where this script is located (used for both server and client scripts)
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+
     # Start server
     print(f"\n🚀 Starting FL Server on {SERVER_HOST}:{SERVER_PORT}...")
     # Use -u flag to ensure unbuffered output for real-time streaming
+    server_script = os.path.join(script_dir, 'fl_server_classification.py')
     server_cmd = [
-        sys.executable, '-u', 'fl_server_classification.py',
+        sys.executable, '-u', server_script,
         '--host', SERVER_HOST,
         '--port', str(SERVER_PORT),
         '--num-clients', str(NUM_CLIENTS),
@@ -591,8 +597,9 @@ def main():
 
         # Build client command
         # Use -u flag to ensure unbuffered output for real-time streaming
+        client_script = os.path.join(script_dir, 'fl_client_classification.py')
         client_cmd = [
-            sys.executable, '-u', 'fl_client_classification.py',
+            sys.executable, '-u', client_script,
             '--client-id', client_id,
             '--server-url', f'http://{SERVER_HOST}:{SERVER_PORT}'
         ]

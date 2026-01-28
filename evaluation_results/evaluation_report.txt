@@ -1,0 +1,162 @@
+======================================================================
+FEDERATED LEARNING SYSTEM EVALUATION REPORT
+======================================================================
+
+Task: regression
+Checkpoint Directory: checkpoints
+Data Directory: .\data\train\gps-imu\
+Number of Checkpoints Evaluated: 3
+Rounds Evaluated: 1 to 3
+
+======================================================================
+SUMMARY STATISTICS
+======================================================================
+
+Test Set: gps_client_000
+----------------------------------------------------------------------
+  Best Round: 3
+  Best RMSE: 0.684042
+  Best R² Score: -35734844.0000
+  Final RMSE: 0.684042
+  Final MAE: 0.505073
+  Final R² Score: -35734844.0000
+
+Test Set: gps_client_001
+----------------------------------------------------------------------
+  Best Round: 3
+  Best RMSE: 0.932895
+  Best R² Score: -70009368.0000
+  Final RMSE: 0.932895
+  Final MAE: 0.673001
+  Final R² Score: -70009368.0000
+
+Test Set: gps_client_002
+----------------------------------------------------------------------
+  Best Round: 1
+  Best RMSE: 1.048943
+  Best R² Score: -21463539122176.0000
+  Final RMSE: 1.049704
+  Final MAE: 0.472274
+  Final R² Score: -21463539122176.0000
+
+======================================================================
+DETAILED RESULTS BY ROUND
+======================================================================
+
+Round 1:
+----------------------------------------------------------------------
+  Server Model - gps_client_000:
+    RMSE: 0.684643
+    MAE: 0.506637
+    R² Score: -37778456.0000
+
+  Server Model - gps_client_001:
+    RMSE: 0.933236
+    MAE: 0.674549
+    R² Score: -74614976.0000
+
+  Server Model - gps_client_002:
+    RMSE: 1.048943
+    MAE: 0.473142
+    R² Score: -22676829634560.0000
+
+  Client-Specific Performance:
+    gps_client_000:
+      RMSE: 0.684643
+      MAE: 0.506637
+
+    client_1:
+      RMSE: 0.938818
+      MAE: 0.664158
+
+    client_2:
+      RMSE: 1.034617
+      MAE: 0.472127
+
+
+Round 2:
+----------------------------------------------------------------------
+  Server Model - gps_client_000:
+    RMSE: 0.684254
+    MAE: 0.505454
+    R² Score: -36197440.0000
+
+  Server Model - gps_client_001:
+    RMSE: 0.933096
+    MAE: 0.673565
+    R² Score: -71068256.0000
+
+  Server Model - gps_client_002:
+    RMSE: 1.049152
+    MAE: 0.472403
+    R² Score: -21607460372480.0000
+
+  Client-Specific Performance:
+    gps_client_000:
+      RMSE: 0.684254
+      MAE: 0.505454
+
+    client_1:
+      RMSE: 0.932579
+      MAE: 0.671131
+
+    client_2:
+      RMSE: 1.047984
+      MAE: 0.472897
+
+
+Round 3:
+----------------------------------------------------------------------
+  Server Model - gps_client_000:
+    RMSE: 0.684042
+    MAE: 0.505073
+    R² Score: -35734844.0000
+
+  Server Model - gps_client_001:
+    RMSE: 0.932895
+    MAE: 0.673001
+    R² Score: -70009368.0000
+
+  Server Model - gps_client_002:
+    RMSE: 1.049704
+    MAE: 0.472274
+    R² Score: -21463539122176.0000
+
+  Client-Specific Performance:
+    gps_client_000:
+      RMSE: 0.684042
+      MAE: 0.505073
+
+    client_1:
+      RMSE: 0.933100
+      MAE: 0.673455
+
+    client_2:
+      RMSE: 1.050360
+      MAE: 0.472355
+
+
+======================================================================
+CLIENT HETEROGENEITY STATISTICS
+======================================================================
+
+Final Round Client Performance Distribution:
+  RMSE:
+    Mean: 0.8892
+    Std: 0.1527
+    Min: 0.6840
+    Max: 1.0504
+    Range: 0.3663
+
+  MAE:
+    Mean: 0.5503
+    Std: 0.0881
+    Min: 0.4724
+    Max: 0.6735
+
+  R2_SCORE:
+    Mean: -6964864186273.3330
+    Std: 9849729559905.8145
+    Min: -20894485315584.0000
+    Max: -35734844.0000
+

@@ -18,6 +18,12 @@ import sys
 import numpy as np
 from typing import Optional
 
+# Add project root to Python path so models module can be imported
+script_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(script_dir)
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
 from data_preprocessing_classification import DataPreprocessorClassification
 
 # -----------------------------------------------------------------------------

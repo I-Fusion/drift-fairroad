@@ -17,6 +17,10 @@ Labeled packet sequences should have:
 - Timestamp in first column (or 'Timestamp' column)
 - Feature columns: SrcPort, DstPort, Length, MsgID, Protocol
 - Label in last column (or 'Label' column)
+
+Sample usage at the project root directory: 
+[1] python .\raw_data_processing\prepare_fl_data_for_run_fl.py --gps-file .\data\waypoint_injection\mission_2_wp_23_attack_add_wp_5_alt_0005_gps.csv --imu-file .\data\waypoint_injection\mission_2_wp_23_attack_add_wp_5_alt_0005_imu.csv --output .\data\train\gps-imu
+[2] python .\raw_data_processing\prepare_fl_data_for_run_fl.py --packet-file .\data\network_packets\mission_2_wp_23_attack_add_wp_5_alt_0005_labeled.csv --output .\data\train\packets
 """
 
 import numpy as np
@@ -367,7 +371,39 @@ def split_among_clients(
             summary_parts.append(f"{len(client_dict['packet'])} packets")
         summary = ", ".join(summary_parts)
         print(f"  Client {client_id}: {summary} (time: {min_timestamp:.0f} to {max_timestamp:.0f})")
-    
+
+    # ------------------------------------------------------------------
+    # Optional post-processing: equalize packet sample counts per client
+    #
+    # For classification with packets only, different clients can end up
+    # with slightly different numbers of packet rows, which leads to a
+    # different number of sliding windows per client. To keep all clients
+    # aligned (same number of windows/rounds), we truncate each client's
+    # packet dataframe to the minimum packet length across clients.
+    #
+    # This keeps timestamps ordered and only discards extra tail samples
+    # from clients that had more data.
+    # ------------------------------------------------------------------
+    packet_lengths = [
+        len(c["packet"]) for c in client_data if "packet" in c and len(c["packet"]) > 0
+    ]
+    if packet_lengths:
+        min_packets = min(packet_lengths)
+        if min_packets <= 0:
+            print("Warning: cannot equalize packet samples (non‑positive minimum length).")
+        else:
+            print(f"\nEqualizing packet samples across clients to {min_packets} rows each...")
+            for c in client_data:
+                if "packet" in c:
+                    original_len = len(c["packet"])
+                    if original_len > min_packets:
+                        c["packet"] = c["packet"].iloc[:min_packets].reset_index(drop=True)
+                        c["num_samples"] = min_packets
+                        print(
+                            f"  Client {c['client_id']}: trimmed packets from "
+                            f"{original_len} to {min_packets}"
+                        )
+
     return client_data
 
 

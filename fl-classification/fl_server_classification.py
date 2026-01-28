@@ -4,6 +4,11 @@ Federated Learning Server for Classification Task
 Coordinates training and aggregates model updates.
 Compatible with both fl_client.py and fl_client_classification.py.
 Handles both classification and time series prediction (regression).
+Sample usage at the project root directory: 
+[1] python .\fl-classification\run_fl_system_classification.py --data-dir .\data\train\gps-imu\
+ --config config_regression --learning-mode regression
+[2] python .\fl-classification\run_fl_system_classification.py --data-dir .\data\train\packets\
+ --config config_classification --learning-mode classification
 """
 import asyncio
 import pickle
@@ -12,10 +17,17 @@ from aiohttp import web
 import logging
 import importlib
 import os
+import sys
 import matplotlib
 matplotlib.use('Agg')  # Non-interactive backend
 import matplotlib.pyplot as plt
 from typing import Optional, Dict, Set
+
+# Add project root to Python path so models module can be imported
+script_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(script_dir)
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 
 from aggregation import FederatedAggregator
 
@@ -188,7 +200,7 @@ class FLServerClassification:
                     logger.info(f"  Client mode: {client_mode}")
                     #print(f"[SERVER DEBUG]   Client mode: {client_mode}")
             else:
-                #print(f"[SERVER DEBUG] {client_id} already registered (duplicate request)")
+                print(f"{client_id} already registered (duplicate request)")
 
             # Check if minimum clients reached and training should start
             #print(f"[SERVER DEBUG] Training status: started={self.training_started}, registered={len(self.registered_clients)}, min_required={self.min_clients}")
@@ -268,7 +280,7 @@ class FLServerClassification:
                 logger.warning(f"{client_id} timed out waiting for round {requested_round} (current: {self.current_round}). Sending current model.")
                 #print(f"[SERVER DEBUG] TIMEOUT: waited {wait_count}s, sending current model (round {self.current_round})")
             else:
-                #print(f"[SERVER DEBUG] Round {requested_round} ready! (waited {wait_count}s)")
+                print(f"[SERVER DEBUG] Round {requested_round} ready! (waited {wait_count}s)")
 
         logger.info(f"Serializing model weights for {client_id} (round {self.current_round})...")
         #print(f"[SERVER DEBUG] Serializing model weights for {client_id} (round {self.current_round})...")

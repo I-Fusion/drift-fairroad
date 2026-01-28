@@ -11,7 +11,7 @@ It supports:
 - Analyzing convergence and generalization
 
 Usage:
-    python evaluate_fl_system.py --checkpoint-dir checkpoints --data-dir data/prepared_clients --task classification --config config_classification
+    python evaluate_fl_system.py --checkpoint-dir checkpoints --data-dir data/train/packets --task classification --config config_classification
     python evaluate_fl_system.py --checkpoint-dir checkpoints --data-dir data/prepared_clients --task regression --config config_regression
 """
 
@@ -44,7 +44,14 @@ if TYPE_CHECKING:  # pragma: no cover - for static analysis only
     from config_classification import *  # type: ignore[import,unused-wildcard-import]
 
 config = None  # Will be set in main()
-from fl-classification.data_preprocessing_classification import DataPreprocessorClassification
+
+# Ensure we can import helpers that live in the fl-classification subdirectory
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+FL_CLASS_DIR = os.path.join(SCRIPT_DIR, "fl-classification")
+if FL_CLASS_DIR not in sys.path:
+    sys.path.insert(0, FL_CLASS_DIR)
+
+from data_preprocessing_classification import DataPreprocessorClassification
 import logging
 
 # Set up logging
@@ -443,7 +450,7 @@ class FLEvaluator:
             roc_auc = None
         
         # Confusion matrix
-        cm = confusion_matrix(y_true, predictions)
+        cm = confusion_matrix(y_true, predictions, labels=[0, 1])
         
         results = {
             'accuracy': accuracy,

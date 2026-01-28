@@ -1,0 +1,24 @@
+Client File Mapping
+================================================================================
+
+Client 0:
+  GPS: .\data\train\gps-imu\gps_client_000.csv
+  GPS Samples: 792
+  IMU: .\data\train\gps-imu\imu_client_000.csv
+  IMU Samples: 3771
+  Time Range: 65785342 to 202784687
+
+Client 1:
+  GPS: .\data\train\gps-imu\gps_client_001.csv
+  GPS Samples: 862
+  IMU: .\data\train\gps-imu\imu_client_001.csv
+  IMU Samples: 4104
+  Time Range: 202984607 to 339784865
+
+Client 2:
+  GPS: .\data\train\gps-imu\gps_client_002.csv
+  GPS Samples: 790
+  IMU: .\data\train\gps-imu\imu_client_002.csv
+  IMU Samples: 3761
+  Time Range: 339984785 to 476645099
+
