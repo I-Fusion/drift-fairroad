@@ -19,7 +19,35 @@ import numpy as np
 from typing import Optional
 
 from data_preprocessing_classification import DataPreprocessorClassification
-import config_classification as config
+
+# -----------------------------------------------------------------------------
+# Dynamic config loading
+# -----------------------------------------------------------------------------
+# Allow selecting the config module at runtime so that server and clients share
+# the same configuration (e.g., "config" for GPS/IMU regression or
+# "config_packets_only" for packet-only classification).
+#
+# The module name is taken from the FL_CONFIG_MODULE environment variable when
+# present, otherwise:
+# - we first try "config_classification"
+# - then fall back to "config".
+CONFIG_MODULE = os.environ.get("FL_CONFIG_MODULE")
+if CONFIG_MODULE is None:
+    try:
+        CONFIG_MODULE = "config_classification"
+        config = importlib.import_module(CONFIG_MODULE)
+    except ImportError:
+        CONFIG_MODULE = "config"
+        config = importlib.import_module(CONFIG_MODULE)
+else:
+    config = importlib.import_module(CONFIG_MODULE)
+
+# Re-export UPPERCASE attributes from the selected config into this module's
+# global namespace so existing code that references SERVER_HOST, SERVER_PORT,
+# etc. continues to work unchanged.
+for _name, _value in vars(config).items():
+    if _name.isupper():
+        globals()[_name] = _value
 
 logging.basicConfig(
     level=logging.INFO,
