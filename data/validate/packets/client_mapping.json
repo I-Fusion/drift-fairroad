@@ -1,0 +1,20 @@
+{
+  "0": {
+    "start_timestamp": 1768240487989611.0,
+    "end_timestamp": 1768240634798100.0,
+    "packet_file": ".\\data\\validate\\packets\\packet_client_000.csv",
+    "num_packet_samples": 19358
+  },
+  "1": {
+    "start_timestamp": 1768240634798482.0,
+    "end_timestamp": 1768240777613547.0,
+    "packet_file": ".\\data\\validate\\packets\\packet_client_001.csv",
+    "num_packet_samples": 19358
+  },
+  "2": {
+    "start_timestamp": 1768240777614065.0,
+    "end_timestamp": 1768240925216391.0,
+    "packet_file": ".\\data\\validate\\packets\\packet_client_002.csv",
+    "num_packet_samples": 19358
+  }
+}

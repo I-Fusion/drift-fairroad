@@ -1,0 +1,26 @@
+{
+  "0": {
+    "start_timestamp": 44805404.0,
+    "end_timestamp": 167985279.0,
+    "gps_file": ".\\data\\validate\\gps-imu\\gps_client_000.csv",
+    "num_gps_samples": 712,
+    "imu_file": ".\\data\\validate\\gps-imu\\imu_client_000.csv",
+    "num_imu_samples": 3388
+  },
+  "1": {
+    "start_timestamp": 168185199.0,
+    "end_timestamp": 291584986.0,
+    "gps_file": ".\\data\\validate\\gps-imu\\gps_client_001.csv",
+    "num_gps_samples": 777,
+    "imu_file": ".\\data\\validate\\gps-imu\\imu_client_001.csv",
+    "num_imu_samples": 3701
+  },
+  "2": {
+    "start_timestamp": 291784906.0,
+    "end_timestamp": 414784853.0,
+    "gps_file": ".\\data\\validate\\gps-imu\\gps_client_002.csv",
+    "num_gps_samples": 711,
+    "imu_file": ".\\data\\validate\\gps-imu\\imu_client_002.csv",
+    "num_imu_samples": 3385
+  }
+}

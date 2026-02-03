@@ -1,0 +1,18 @@
+Client File Mapping
+================================================================================
+
+Client 0:
+  Packet: .\data\validate\packets\packet_client_000.csv
+  Packet Samples: 19358
+  Time Range: 1768240487989611 to 1768240634798100
+
+Client 1:
+  Packet: .\data\validate\packets\packet_client_001.csv
+  Packet Samples: 19358
+  Time Range: 1768240634798482 to 1768240777613547
+
+Client 2:
+  Packet: .\data\validate\packets\packet_client_002.csv
+  Packet Samples: 19358
+  Time Range: 1768240777614065 to 1768240925216391
+

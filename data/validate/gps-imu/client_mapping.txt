@@ -1,0 +1,24 @@
+Client File Mapping
+================================================================================
+
+Client 0:
+  GPS: .\data\validate\gps-imu\gps_client_000.csv
+  GPS Samples: 712
+  IMU: .\data\validate\gps-imu\imu_client_000.csv
+  IMU Samples: 3388
+  Time Range: 44805404 to 167985279
+
+Client 1:
+  GPS: .\data\validate\gps-imu\gps_client_001.csv
+  GPS Samples: 777
+  IMU: .\data\validate\gps-imu\imu_client_001.csv
+  IMU Samples: 3701
+  Time Range: 168185199 to 291584986
+
+Client 2:
+  GPS: .\data\validate\gps-imu\gps_client_002.csv
+  GPS Samples: 711
+  IMU: .\data\validate\gps-imu\imu_client_002.csv
+  IMU Samples: 3385
+  Time Range: 291784906 to 414784853
+
