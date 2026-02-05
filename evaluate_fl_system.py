@@ -1,14 +1,30 @@
 """
 Comprehensive Evaluation Script for Federated Learning System
 
-This script evaluates the FL system for both classification and regression tasks.
-It supports:
-- Loading trained models from checkpoints
-- Evaluating on test data
-- Computing task-specific metrics
-- Generating comprehensive visualizations
-- Comparing performance across clients
-- Analyzing convergence and generalization
+This script evaluates the FL system for both classification and regression tasks,
+including cyber anomaly detection (e.g. GPS spoofing, ADS-B ghost, jamming).
+
+Evaluation dimensions:
+
+1. Detection accuracy and responsiveness
+   - AUROC, precision, recall, F1 (normal vs attack separation)
+   - False alarm rate (FP / (FP+TN))
+   - Time to detect (optional, from --attack-onset-file)
+
+2. Robustness to malicious or poisoned updates
+   - Degradation under poisoning (optional, from --poisoning-results JSON)
+   - Backdoor success rate (optional, from --backdoor-results JSON)
+   - Non-IID resilience (consistency across clients, from client heterogeneity)
+
+3. Drift resistance and model stability
+   - Drift: accuracy on fixed validation set at round 0 vs later rounds
+   - Convergence stability: round at which metric stabilizes, variance in tail rounds
+
+4. Mission continuity
+   - False alarm rate and optional limit (e.g. max N false alarms per hour via --max-false-alarms-per-hour, --window-duration-sec)
+
+5. Efficiency and practicality
+   - Model size (parameters, MB), checkpoint size, communication overhead per round
 
 Usage:
     python evaluate_fl_system.py --checkpoint-dir checkpoints --data-dir data/train/packets --task classification --config config_classification
@@ -30,6 +46,7 @@ from collections import defaultdict
 import json
 import glob
 import importlib
+import re
 from sklearn.metrics import (
     accuracy_score, precision_score, recall_score, f1_score,
     confusion_matrix, classification_report, roc_auc_score, roc_curve,
@@ -38,8 +55,8 @@ from sklearn.metrics import (
 
 # NOTE: The actual config module is selected at runtime in main() based on a
 # --config argument. For type checkers, we hint that the symbols come from
-# config_packets_only, but at runtime `config` will be whatever module is
-# imported there (e.g., config_packets_only, config_regression, config, ...).
+# config_classification, but at runtime `config` will be whatever module is
+# imported there (e.g., config_classification, config_regression, config, ...).
 if TYPE_CHECKING:  # pragma: no cover - for static analysis only
     from config_classification import *  # type: ignore[import,unused-wildcard-import]
 
@@ -78,7 +95,13 @@ class FLEvaluator:
         data_dir: Optional[str] = None,
         task: str = 'auto',
         test_split: float = 0.2,
-        device: Optional[str] = None
+        device: Optional[str] = None,
+        attack_onset_file: Optional[str] = None,
+        attack_onset_dir: Optional[str] = None,
+        max_false_alarms_per_hour: Optional[float] = None,
+        window_duration_sec: Optional[float] = None,
+        poisoning_results_path: Optional[str] = None,
+        backdoor_results_path: Optional[str] = None,
     ):
         """
         Initialize FL Evaluator.
@@ -89,12 +112,24 @@ class FLEvaluator:
             task: 'classification', 'regression', or 'auto' (auto-detect)
             test_split: Proportion of data to use for testing (if test data not available)
             device: Device to use ('cuda' or 'cpu', None = auto-detect)
+            attack_onset_file: Optional JSON with attack_onset_indices (single list) or per-client keys
+            attack_onset_dir: Optional directory with attack_onset_client_1.json, ... (one JSON per client)
+            max_false_alarms_per_hour: Operational limit for mission continuity
+            window_duration_sec: Duration per window in seconds (for false alarms per hour)
+            poisoning_results_path: Optional JSON with clean vs poisoned run metrics
+            backdoor_results_path: Optional JSON with backdoor success rate
         """
         self.checkpoint_dir = checkpoint_dir
         self.data_dir = data_dir
         self.task = task
         self.test_split = test_split
         self.device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
+        self.attack_onset_file = attack_onset_file
+        self.attack_onset_dir = attack_onset_dir
+        self.max_false_alarms_per_hour = max_false_alarms_per_hour
+        self.window_duration_sec = window_duration_sec
+        self.poisoning_results_path = poisoning_results_path
+        self.backdoor_results_path = backdoor_results_path
         
         # Load model architecture
         self.model_module = importlib.import_module(config.MODEL_PATH)
@@ -112,7 +147,55 @@ class FLEvaluator:
         print(f"  Data dir: {data_dir}")
         print(f"  Task: {task}")
         print(f"  Device: {self.device}")
-    
+
+    def _load_attack_onset_data(self) -> Dict[str, List[int]]:
+        """
+        Load attack onset indices for time-to-detect. Returns a dict mapping test_name (e.g. client_1)
+        to list of test-set indices, or {"__default__": indices} for legacy single-file format.
+        If --attack-onset-dir is set, loads one JSON per client (e.g. attack_onset_client_1.json).
+        If --attack-onset-file is set, supports either {"attack_onset_indices": [...]} (legacy)
+        or {"client_1": [...], "client_2": [...]} (per-client).
+        """
+        out = {}
+        if self.attack_onset_dir and os.path.isdir(self.attack_onset_dir):
+            for path in sorted(glob.glob(os.path.join(self.attack_onset_dir, "*.json"))):
+                name = Path(path).stem
+                # attack_onset_client_1.json -> client_1; client_1.json -> client_1
+                if name.startswith("attack_onset_"):
+                    client_id = name.replace("attack_onset_", "")
+                else:
+                    client_id = name
+                if not re.match(r"^client_\d+$", client_id):
+                    continue
+                try:
+                    with open(path) as f:
+                        data = json.load(f)
+                    indices = data.get("attack_onset_indices", data.get("onset_indices", []))
+                    if isinstance(indices, list):
+                        out[client_id] = [int(x) for x in indices]
+                except Exception as e:
+                    logger.warning("Could not load attack onset file %s: %s", path, e)
+            return out
+        if self.attack_onset_file and os.path.exists(self.attack_onset_file):
+            try:
+                with open(self.attack_onset_file) as f:
+                    data = json.load(f)
+            except Exception as e:
+                logger.warning("Could not load attack onset file: %s", e)
+                return {}
+            # Legacy: single list
+            if "attack_onset_indices" in data and isinstance(data["attack_onset_indices"], list):
+                client_like_keys = [k for k in data if k != "attack_onset_indices" and re.match(r"^client_\d+$", k)]
+                if not client_like_keys:
+                    out["__default__"] = [int(x) for x in data["attack_onset_indices"]]
+                    return out
+            # Per-client: keys like client_1, client_2
+            for k, v in data.items():
+                if re.match(r"^client_\d+$", k) and isinstance(v, list):
+                    out[k] = [int(x) for x in v]
+            return out
+        return {}
+
     def load_checkpoints(self) -> Dict[int, Dict]:
         """Load all checkpoints from checkpoint directory."""
         print("\n" + "="*70)
@@ -449,9 +532,13 @@ class FLEvaluator:
         except:
             roc_auc = None
         
-        # Confusion matrix
+        # Confusion matrix (binary: 0=normal, 1=attack)
         cm = confusion_matrix(y_true, predictions, labels=[0, 1])
         
+        # False alarm rate: FP / (FP + TN) = proportion of normal samples predicted as attack
+        tn, fp, fn, tp = cm.ravel() if cm.size == 4 else (0, 0, 0, 0)
+        false_alarm_rate = fp / (fp + tn) if (fp + tn) > 0 else 0.0
+        # Also record counts for mission continuity
         results = {
             'accuracy': accuracy,
             'precision': precision,
@@ -459,6 +546,11 @@ class FLEvaluator:
             'f1_score': f1,
             'roc_auc': roc_auc,
             'confusion_matrix': cm.tolist(),
+            'false_alarm_rate': false_alarm_rate,
+            'true_negatives': int(tn),
+            'false_positives': int(fp),
+            'false_negatives': int(fn),
+            'true_positives': int(tp),
             'predictions': predictions.tolist(),
             'probabilities': probabilities.tolist(),
             'y_true': y_true.tolist()
@@ -864,14 +956,14 @@ class FLEvaluator:
                                 client_labels.append(client_id)
                     
                     if client_accs:
-                        axes[0].boxplot([client_accs], labels=['All Clients'])
+                        axes[0].boxplot([client_accs], tick_labels=['All Clients'])
                         axes[0].scatter([1] * len(client_accs), client_accs, alpha=0.6, s=100)
                         axes[0].set_ylabel('Accuracy', fontsize=12)
                         axes[0].set_title(f'Accuracy Distribution Across Clients (Round {final_round})', 
                                          fontsize=14, fontweight='bold')
                         axes[0].grid(True, alpha=0.3)
                         
-                        axes[1].boxplot([client_f1s], labels=['All Clients'])
+                        axes[1].boxplot([client_f1s], tick_labels=['All Clients'])
                         axes[1].scatter([1] * len(client_f1s), client_f1s, alpha=0.6, s=100)
                         axes[1].set_ylabel('F1 Score', fontsize=12)
                         axes[1].set_title(f'F1 Score Distribution Across Clients (Round {final_round})', 
@@ -1107,6 +1199,27 @@ class FLEvaluator:
             plt.close()
             print(f"  Saved: {plot_path}")
     
+    def plot_drift(self, output_dir: str = "evaluation_results"):
+        """Plot accuracy drift over rounds (fixed validation set)."""
+        drift = self.compute_drift_metrics()
+        if not drift or 'drift_per_round' not in drift:
+            return
+        os.makedirs(output_dir, exist_ok=True)
+        rounds = sorted(drift['drift_per_round'].keys())
+        drifts = [drift['drift_per_round'][r] for r in rounds]
+        fig, ax = plt.subplots(figsize=(10, 5))
+        ax.plot(rounds, drifts, 'o-', linewidth=2, markersize=4, color='coral')
+        ax.axhline(0, color='gray', linestyle='--')
+        ax.set_xlabel('Round', fontsize=12)
+        ax.set_ylabel('Accuracy drift (round_0 − current)', fontsize=12)
+        ax.set_title('Model drift on fixed validation set (positive = performance drop)', fontsize=14, fontweight='bold')
+        ax.grid(True, alpha=0.3)
+        plt.tight_layout()
+        plot_path = os.path.join(output_dir, 'drift_over_rounds.png')
+        plt.savefig(plot_path, dpi=300, bbox_inches='tight')
+        plt.close()
+        print(f"  Saved: {plot_path}")
+
     def plot_predictions_vs_actual(self, output_dir: str = "evaluation_results"):
         """Plot predictions vs actual values for regression tasks."""
         if self.task != 'regression':
@@ -1249,7 +1362,270 @@ class FLEvaluator:
                     }
         
         return stats
-    
+
+    # -------------------------------------------------------------------------
+    # Detection accuracy & responsiveness (AUROC, false alarm, time-to-detect)
+    # -------------------------------------------------------------------------
+    def compute_time_to_detect(
+        self,
+        results: Dict[str, Any],
+        attack_onset_indices: Optional[List[int]] = None,
+        window_step: Optional[int] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Time to detect: number of windows (or steps) from attack onset until first
+        correct positive prediction. Requires knowing which test indices are "after" an attack start.
+        attack_onset_indices: list of test-set indices at which an attack begins.
+        window_step: advance per window (e.g. WINDOW_SIZE - OVERLAP). If None, use 1.
+        """
+        if attack_onset_indices is None or not attack_onset_indices:
+            return None
+        preds = np.array(results.get("predictions", []))
+        y_true = np.array(results.get("y_true", []))
+        if len(preds) == 0 or len(y_true) == 0:
+            return None
+        step = window_step or 1
+        delays = []
+        for onset in attack_onset_indices:
+            onset = int(onset)
+            if onset >= len(preds):
+                continue
+            # First window index where model predicts attack (1) after onset
+            for i in range(onset, len(preds)):
+                if preds[i] == 1:
+                    delays.append((i - onset) * step)
+                    break
+        if not delays:
+            return {"time_to_detect_windows": None, "mean_delay_windows": None, "min_delay_windows": None}
+        return {
+            "time_to_detect_windows": delays,
+            "mean_delay_windows": float(np.mean(delays)),
+            "min_delay_windows": int(np.min(delays)),
+            "max_delay_windows": int(np.max(delays)),
+        }
+
+    # -------------------------------------------------------------------------
+    # Drift resistance and convergence stability
+    # -------------------------------------------------------------------------
+    def compute_drift_metrics(self, reference_test_name: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Drift: change in accuracy on a fixed validation set from start to each round.
+        reference_test_name: test set to use (default: first available).
+        """
+        if not self.evaluation_results or self.task != "classification":
+            return {}
+        rounds = sorted(self.evaluation_results.keys())
+        test_name = reference_test_name or next(iter(self.test_data.keys()), None)
+        if not test_name or test_name not in self.evaluation_results.get(rounds[0], {}):
+            return {}
+        acc_at_start = self.evaluation_results[rounds[0]][test_name].get("accuracy")
+        if acc_at_start is None:
+            return {}
+        drift_per_round = {}
+        for r in rounds:
+            if test_name in self.evaluation_results[r]:
+                acc = self.evaluation_results[r][test_name].get("accuracy")
+                if acc is not None:
+                    drift_per_round[r] = float(acc_at_start - acc)  # positive = performance dropped
+        if not drift_per_round:
+            return {}
+        last_round = max(drift_per_round.keys())
+        return {
+            "reference_test": test_name,
+            "accuracy_at_round_0": float(acc_at_start),
+            "accuracy_at_final_round": float(self.evaluation_results[last_round][test_name]["accuracy"]),
+            "drift_at_final_round": float(drift_per_round[last_round]),
+            "max_drift": float(max(drift_per_round.values())),
+            "min_drift": float(min(drift_per_round.values())),
+            "drift_per_round": {int(k): float(v) for k, v in drift_per_round.items()},
+        }
+
+    def compute_convergence_stability(
+        self,
+        metric_name: str = "accuracy",
+        epsilon: float = 0.02,
+        tail_rounds: int = 10,
+        reference_test_name: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Convergence stability: round at which metric stabilizes (within epsilon of final)
+        and variance of metric in the last tail_rounds.
+        """
+        if not self.evaluation_results:
+            return {}
+        rounds = sorted(self.evaluation_results.keys())
+        test_name = reference_test_name or next(iter(self.test_data.keys()), None)
+        if not test_name:
+            return {}
+        values = []
+        for r in rounds:
+            if test_name in self.evaluation_results[r]:
+                v = self.evaluation_results[r][test_name].get(metric_name)
+                if v is not None:
+                    values.append((r, v))
+        if len(values) < 2:
+            return {}
+        rounds_vals, vals = zip(*values)
+        final_val = vals[-1]
+        # First round where metric stays within epsilon of final (forward)
+        stable_round = None
+        for i, (r, v) in enumerate(values):
+            if abs(v - final_val) <= epsilon:
+                stable_round = r
+                break
+        # Variance in last tail_rounds
+        tail = values[-min(tail_rounds, len(values)):]
+        tail_vals = [v for _, v in tail]
+        variance_tail = float(np.var(tail_vals)) if len(tail_vals) > 1 else 0.0
+        return {
+            "metric": metric_name,
+            "reference_test": test_name,
+            "final_value": float(final_val),
+            "round_stabilized": stable_round,
+            "epsilon": epsilon,
+            "variance_last_n_rounds": variance_tail,
+            "std_last_n_rounds": float(np.std(tail_vals)) if len(tail_vals) > 1 else 0.0,
+            "n_rounds": len(rounds_vals),
+        }
+
+    # -------------------------------------------------------------------------
+    # Mission continuity (false alarms within operational limits)
+    # -------------------------------------------------------------------------
+    def compute_mission_continuity(
+        self,
+        max_false_alarms_per_hour: Optional[float] = None,
+        total_hours: Optional[float] = None,
+        reference_test_name: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Check whether false alarms stay within operational limits (e.g. max N per hour).
+        If total_hours not provided, uses number of test windows and window_duration_sec if set.
+        """
+        if not self.evaluation_results or self.task != "classification":
+            return {}
+        rounds = sorted(self.evaluation_results.keys())
+        test_name = reference_test_name or next(iter(self.test_data.keys()), None)
+        if not test_name:
+            return {}
+        # Use last round as representative
+        last = self.evaluation_results[rounds[-1]][test_name]
+        fp = last.get("false_positives", 0)
+        tn = last.get("true_negatives", 0)
+        n_total = fp + tn + last.get("true_positives", 0) + last.get("false_negatives", 0)
+        if n_total == 0:
+            return {}
+        out = {
+            "false_positive_count": fp,
+            "true_negative_count": tn,
+            "total_test_windows": n_total,
+            "false_alarm_rate": last.get("false_alarm_rate", fp / (fp + tn) if (fp + tn) > 0 else 0),
+        }
+        if max_false_alarms_per_hour is not None and total_hours is not None and total_hours > 0:
+            out["max_false_alarms_per_hour_limit"] = max_false_alarms_per_hour
+            out["observed_false_alarms_per_hour"] = fp / total_hours
+            out["within_operational_limit"] = (fp / total_hours) <= max_false_alarms_per_hour
+        return out
+
+    # -------------------------------------------------------------------------
+    # Efficiency (communication, compute, memory)
+    # -------------------------------------------------------------------------
+    def compute_efficiency_metrics(self) -> Dict[str, Any]:
+        """Model size (params, bytes), checkpoint file sizes, estimated memory."""
+        if not self.checkpoints:
+            return {}
+        rounds = sorted(self.checkpoints.keys())
+        first_ckpt = self.checkpoints[rounds[0]]
+        state = first_ckpt.get("model_state_dict")
+        if state is None:
+            return {}
+        total_params = sum(p.numel() for p in state.values())
+        bytes_per_param = 4  # float32
+        model_size_bytes = total_params * bytes_per_param
+        checkpoint_dir = Path(self.checkpoint_dir)
+        server_files = list(checkpoint_dir.glob("server_round_*.pt"))
+        file_sizes = []
+        for f in server_files:
+            try:
+                file_sizes.append(f.stat().st_size)
+            except OSError:
+                pass
+        return {
+            "total_parameters": total_params,
+            "model_size_mb": round(model_size_bytes / (1024 * 1024), 4),
+            "estimated_memory_mb": round(model_size_bytes * 2 / (1024 * 1024), 4),  # model + grad rough
+            "checkpoint_file_sizes_bytes": file_sizes,
+            "mean_checkpoint_size_mb": round(np.mean(file_sizes) / (1024 * 1024), 4) if file_sizes else None,
+            "communication_overhead_per_round_mb": round(np.mean(file_sizes) / (1024 * 1024), 4) if file_sizes else None,
+        }
+
+    # -------------------------------------------------------------------------
+    # Robustness: non-IID resilience (from client variance); poisoning/backdoor placeholders
+    # -------------------------------------------------------------------------
+    def compute_non_iid_resilience(self) -> Dict[str, Any]:
+        """
+        Non-IID resilience: consistency of performance across clients (inverse of normalized variance).
+        Higher = more stable across heterogeneous clients.
+        """
+        stats = self.calculate_client_statistics()
+        if not stats:
+            return {}
+        out = {}
+        if self.task == "classification" and "accuracy" in stats:
+            mean_acc = stats["accuracy"]["mean"]
+            std_acc = stats["accuracy"]["std"]
+            # Resilience: 1 - cv (coefficient of variation), clamped to [0,1]
+            cv = (std_acc / mean_acc) if mean_acc > 0 else 1.0
+            out["accuracy_cv"] = float(cv)
+            out["non_iid_resilience"] = float(max(0, min(1, 1 - cv)))
+            out["accuracy_mean"] = float(mean_acc)
+            out["accuracy_std"] = float(std_acc)
+        elif self.task == "regression" and "rmse" in stats:
+            mean_rmse = stats["rmse"]["mean"]
+            std_rmse = stats["rmse"]["std"]
+            cv = (std_rmse / mean_rmse) if mean_rmse > 0 else 1.0
+            out["rmse_cv"] = float(cv)
+            out["non_iid_resilience"] = float(max(0, min(1, 1 - cv)))
+        return out
+
+    def load_robustness_metadata(
+        self,
+        poisoning_results_path: Optional[str] = None,
+        backdoor_results_path: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Load optional robustness results from JSON files:
+        - poisoning: { "clean": { "accuracy": ... }, "poisoned_0.2": { "accuracy": ... }, ... }
+        - backdoor: { "backdoor_success_rate": ..., "trigger_accuracy": ... }
+        Returns a dict to merge into the report.
+        """
+        out = {"degradation_under_poisoning": None, "backdoor_success_rate": None}
+        if poisoning_results_path and os.path.exists(poisoning_results_path):
+            try:
+                with open(poisoning_results_path) as f:
+                    data = json.load(f)
+                clean_acc = data.get("clean", {}).get("accuracy") or data.get("clean", {}).get("final_accuracy")
+                if clean_acc is not None:
+                    degradations = {}
+                    for k, v in data.items():
+                        if k == "clean":
+                            continue
+                        acc = v.get("accuracy") or v.get("final_accuracy")
+                        if acc is not None:
+                            degradations[k] = float(clean_acc - acc)
+                    out["degradation_under_poisoning"] = degradations
+                    out["poisoning_clean_accuracy"] = float(clean_acc)
+            except Exception as e:
+                logger.warning("Failed to load poisoning results: %s", e)
+        if backdoor_results_path and os.path.exists(backdoor_results_path):
+            try:
+                with open(backdoor_results_path) as f:
+                    data = json.load(f)
+                out["backdoor_success_rate"] = data.get("backdoor_success_rate")
+                out["backdoor_trigger_accuracy"] = data.get("trigger_accuracy")
+            except Exception as e:
+                logger.warning("Failed to load backdoor results: %s", e)
+        return out
+
     def generate_report(self, output_dir: str = "evaluation_results"):
         """Generate comprehensive evaluation report."""
         print("\n" + "="*70)
@@ -1317,7 +1693,60 @@ class FLEvaluator:
                 }
         
         report['summary'] = summary
-        
+
+        # Detection accuracy & responsiveness (per test set / client when onset data is per-client)
+        report['detection_responsiveness'] = {}
+        if self.task == 'classification' and self.evaluation_results:
+            rounds_sorted = sorted(self.evaluation_results.keys())
+            window_step = getattr(config, 'WINDOW_SIZE', 50) - getattr(config, 'OVERLAP', 25)
+            onset_by_client = self._load_attack_onset_data()
+            first_test = True
+            for test_name in self.test_data.keys():
+                if test_name not in self.evaluation_results[rounds_sorted[-1]]:
+                    continue
+                last_res = self.evaluation_results[rounds_sorted[-1]][test_name]
+                dr = {
+                    'false_alarm_rate': last_res.get('false_alarm_rate'),
+                    'roc_auc': last_res.get('roc_auc'),
+                    'precision': last_res.get('precision'),
+                    'recall': last_res.get('recall'),
+                    'f1_score': last_res.get('f1_score'),
+                }
+                onset_indices = onset_by_client.get(test_name) or (onset_by_client.get('__default__') if first_test else None)
+                if onset_indices:
+                    ttd = self.compute_time_to_detect(last_res, attack_onset_indices=onset_indices, window_step=window_step)
+                    if ttd:
+                        dr['time_to_detect'] = ttd
+                report['detection_responsiveness'][test_name] = dr
+                first_test = False
+
+        # Drift resistance and convergence stability
+        report['drift_resistance'] = self.compute_drift_metrics()
+        report['convergence_stability'] = self.compute_convergence_stability()
+
+        # Mission continuity
+        total_hours = None
+        if self.window_duration_sec and self.test_data:
+            test_name = next(iter(self.test_data.keys()), None)
+            if test_name:
+                X, _ = self.test_data[test_name]
+                n_windows = len(X)
+                total_hours = (n_windows * self.window_duration_sec) / 3600.0
+        report['mission_continuity'] = self.compute_mission_continuity(
+            max_false_alarms_per_hour=self.max_false_alarms_per_hour,
+            total_hours=total_hours,
+        )
+
+        # Efficiency
+        report['efficiency'] = self.compute_efficiency_metrics()
+
+        # Non-IID resilience and robustness (poisoning/backdoor from files)
+        report['non_iid_resilience'] = self.compute_non_iid_resilience()
+        report['robustness'] = self.load_robustness_metadata(
+            self.poisoning_results_path,
+            self.backdoor_results_path,
+        )
+
         # Add client evaluation results if available
         if self.client_evaluation_results:
             report['client_evaluation_results'] = {}
@@ -1455,6 +1884,109 @@ class FLEvaluator:
                         if 'range' in stats_dict:
                             f.write(f"    Range: {stats_dict['range']:.4f}\n")
                         f.write("\n")
+
+            # Detection accuracy & responsiveness (per client when available)
+            dr_all = report.get('detection_responsiveness', {})
+            if dr_all:
+                f.write("="*70 + "\n")
+                f.write("DETECTION ACCURACY AND RESPONSIVENESS\n")
+                f.write("="*70 + "\n\n")
+                for test_name, dr in dr_all.items():
+                    label = test_name if test_name != "__default__" else "(first test set)"
+                    f.write(f"  [{label}]\n")
+                    v = dr.get('false_alarm_rate')
+                    f.write(f"    False alarm rate: {v if v is not None else 'N/A'}\n")
+                    v = dr.get('roc_auc')
+                    f.write(f"    ROC AUC (AUROC): {v if v is not None else 'N/A'}\n")
+                    v = dr.get('precision')
+                    f.write(f"    Precision: {v if v is not None else 'N/A'}\n")
+                    v = dr.get('recall')
+                    f.write(f"    Recall: {v if v is not None else 'N/A'}\n")
+                    v = dr.get('f1_score')
+                    f.write(f"    F1: {v if v is not None else 'N/A'}\n")
+                    if dr.get('time_to_detect'):
+                        ttd = dr['time_to_detect']
+                        mean_delay = ttd.get('mean_delay_windows')
+                        if mean_delay is not None:
+                            f.write(f"    Time to detect (mean delay, windows): {mean_delay}\n")
+                        else:
+                            f.write(f"    Time to detect (mean delay, windows): N/A (no positive prediction after onset)\n")
+                    f.write("\n")
+
+            # Drift resistance
+            drift = report.get('drift_resistance', {})
+            if drift:
+                f.write("="*70 + "\n")
+                f.write("DRIFT RESISTANCE AND MODEL STABILITY\n")
+                f.write("="*70 + "\n\n")
+                f.write(f"  Reference test: {drift.get('reference_test')}\n")
+                f.write(f"  Accuracy at round 0: {drift.get('accuracy_at_round_0')}\n")
+                f.write(f"  Accuracy at final round: {drift.get('accuracy_at_final_round')}\n")
+                f.write(f"  Drift at final round: {drift.get('drift_at_final_round')} (positive = drop)\n")
+                f.write(f"  Max drift: {drift.get('max_drift')}\n")
+                f.write("\n")
+
+            # Convergence stability
+            conv = report.get('convergence_stability', {})
+            if conv:
+                f.write("="*70 + "\n")
+                f.write("CONVERGENCE STABILITY\n")
+                f.write("="*70 + "\n\n")
+                f.write(f"  Metric: {conv.get('metric')}\n")
+                f.write(f"  Final value: {conv.get('final_value')}\n")
+                f.write(f"  Round stabilized (within epsilon={conv.get('epsilon')}): {conv.get('round_stabilized')}\n")
+                f.write(f"  Variance (last n rounds): {conv.get('variance_last_n_rounds')}\n")
+                f.write("\n")
+
+            # Mission continuity
+            mc = report.get('mission_continuity', {})
+            if mc:
+                f.write("="*70 + "\n")
+                f.write("MISSION CONTINUITY\n")
+                f.write("="*70 + "\n\n")
+                f.write(f"  False positive count: {mc.get('false_positive_count')}\n")
+                f.write(f"  Total test windows: {mc.get('total_test_windows')}\n")
+                f.write(f"  False alarm rate: {mc.get('false_alarm_rate')}\n")
+                if mc.get('max_false_alarms_per_hour_limit') is not None:
+                    f.write(f"  Max false alarms/hour (limit): {mc.get('max_false_alarms_per_hour_limit')}\n")
+                    f.write(f"  Observed false alarms/hour: {mc.get('observed_false_alarms_per_hour')}\n")
+                    f.write(f"  Within operational limit: {mc.get('within_operational_limit')}\n")
+                f.write("\n")
+
+            # Efficiency
+            eff = report.get('efficiency', {})
+            if eff:
+                f.write("="*70 + "\n")
+                f.write("EFFICIENCY AND PRACTICALITY\n")
+                f.write("="*70 + "\n\n")
+                f.write(f"  Total parameters: {eff.get('total_parameters')}\n")
+                f.write(f"  Model size (MB): {eff.get('model_size_mb')}\n")
+                f.write(f"  Estimated memory (MB): {eff.get('estimated_memory_mb')}\n")
+                f.write(f"  Communication overhead per round (MB): {eff.get('communication_overhead_per_round_mb')}\n")
+                f.write("\n")
+
+            # Non-IID resilience
+            nii = report.get('non_iid_resilience', {})
+            if nii:
+                f.write("="*70 + "\n")
+                f.write("NON-IID RESILIENCE\n")
+                f.write("="*70 + "\n\n")
+                f.write(f"  Non-IID resilience (0-1, higher=more stable): {nii.get('non_iid_resilience')}\n")
+                f.write("\n")
+
+            # Robustness (poisoning / backdoor)
+            rob = report.get('robustness', {})
+            if rob and (rob.get('degradation_under_poisoning') or rob.get('backdoor_success_rate') is not None):
+                f.write("="*70 + "\n")
+                f.write("ROBUSTNESS TO POISONING AND BACKDOORS\n")
+                f.write("="*70 + "\n\n")
+                if rob.get('degradation_under_poisoning'):
+                    f.write("  Degradation under poisoning (accuracy drop vs clean):\n")
+                    for k, v in rob['degradation_under_poisoning'].items():
+                        f.write(f"    {k}: {v}\n")
+                if rob.get('backdoor_success_rate') is not None:
+                    f.write(f"  Backdoor success rate: {rob['backdoor_success_rate']}\n")
+                f.write("\n")
         
         print(f"  Saved text report: {txt_path}")
     
@@ -1489,6 +2021,7 @@ class FLEvaluator:
             self.plot_client_heterogeneity(output_dir)
         if self.task == 'classification':
             self.plot_confusion_matrices(output_dir)
+            self.plot_drift(output_dir)
         else:
             self.plot_predictions_vs_actual(output_dir)
         
@@ -1578,6 +2111,42 @@ def main():
         action='store_false',
         help='Disable client-specific evaluation'
     )
+    parser.add_argument(
+        '--attack-onset-file',
+        type=str,
+        default=None,
+        help='JSON: single list (attack_onset_indices) or per-client keys (client_1: [...], client_2: [...])'
+    )
+    parser.add_argument(
+        '--attack-onset-dir',
+        type=str,
+        default=None,
+        help='Directory with one JSON per client (e.g. attack_onset_client_1.json, attack_onset_client_2.json)'
+    )
+    parser.add_argument(
+        '--max-false-alarms-per-hour',
+        type=float,
+        default=None,
+        help='Operational limit for mission continuity (e.g. max N false alarms per hour)'
+    )
+    parser.add_argument(
+        '--window-duration-sec',
+        type=float,
+        default=None,
+        help='Duration per window in seconds (for false alarms per hour from test set length)'
+    )
+    parser.add_argument(
+        '--poisoning-results',
+        type=str,
+        default=None,
+        help='JSON file with clean vs poisoned run metrics for degradation_under_poisoning'
+    )
+    parser.add_argument(
+        '--backdoor-results',
+        type=str,
+        default=None,
+        help='JSON file with backdoor_success_rate and optional trigger_accuracy'
+    )
     args = parser.parse_args()
 
     # ------------------------------------------------------------------
@@ -1602,7 +2171,13 @@ def main():
         data_dir=args.data_dir,
         task=args.task,
         test_split=args.test_split,
-        device=args.device
+        device=args.device,
+        attack_onset_file=args.attack_onset_file,
+        attack_onset_dir=args.attack_onset_dir,
+        max_false_alarms_per_hour=args.max_false_alarms_per_hour,
+        window_duration_sec=args.window_duration_sec,
+        poisoning_results_path=args.poisoning_results,
+        backdoor_results_path=args.backdoor_results,
     )
     
     # Run full evaluation
