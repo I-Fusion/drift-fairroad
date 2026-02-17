@@ -7,7 +7,7 @@ This directory contains **labeled network packet sequence** CSVs used for federa
 ## Purpose
 
 - **FL classification**: Train and evaluate binary (or multi-class) models that separate **normal** from **attack** traffic (e.g. GPS spoofing, waypoint injection, jamming-related traffic).
-- **Pipeline**: Data is prepared with `raw_data_processing/prepare_fl_data_for_run_fl.py` (packet-only mode), then used by `fl-classification/run_fl_system_classification.py` and `evaluate_fl_system.py` with configs such as `config_classification` / `config_packets_only`.
+- **Pipeline**: Data is prepared with `raw_data_processing/prepare_fl_data_for_run_fl.py` (packet-only mode), then used by `fl-time-series/run_fl_system_time_series.py` and `evaluate_fl_system.py` with configs such as `config_classification` / `config_packets_only`.
 
 ---
 
@@ -25,7 +25,7 @@ Each file must have a **header row** and the following columns (names must match
 | **Protocol**  | Protocol identifier (numeric)  | Feature        |
 | **Label**     | 0 = normal, 1 = attack (or class id) | Target; config: `LABEL_COL` |
 
-Config in `fl-classification/config_classification.py`:
+Config in `fl-time-series/config_classification.py`:
 
 - **`PACKET_FEATURES`**: `['SrcPort', 'DstPort', 'Length', 'MsgID', 'Protocol']`
 - **`PACKET_TIMESTAMP_COL`**: `'Timestamp'`
@@ -68,7 +68,7 @@ Naming pattern: `mission_*_attack_*_labeled.csv` — one CSV per scenario; multi
 
 2. **Train FL classification**:
    ```bash
-   python fl-classification/run_fl_system_classification.py --data-dir data/train/packets --config config_classification --learning-mode classification
+   python fl-time-series/run_fl_system_time_series.py --data-dir data/train/packets --config config_classification --learning-mode classification
    ```
 
 3. **Evaluate** (detection accuracy, AUROC, false alarm rate, etc.):

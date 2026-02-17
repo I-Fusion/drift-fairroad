@@ -1,0 +1,177 @@
+======================================================================
+FEDERATED LEARNING SYSTEM EVALUATION REPORT
+======================================================================
+
+Task: regression
+Checkpoint Directory: C:\Users\86152\Downloads\drift-fairroad\fl-time-series\checkpoints
+Data Directory: .\data\validate\gps-imu\
+Number of Checkpoints Evaluated: 3
+Rounds Evaluated: 1 to 3
+
+======================================================================
+SUMMARY STATISTICS
+======================================================================
+
+Test Set: gps_client_000
+----------------------------------------------------------------------
+  Best Round: 3
+  Best RMSE: 1.135084
+  Best R² Score: -113773088.0000
+  Final RMSE: 1.135084
+  Final MAE: 0.815714
+  Final R² Score: -113773088.0000
+
+Test Set: gps_client_001
+----------------------------------------------------------------------
+  Best Round: 3
+  Best RMSE: 0.525846
+  Best R² Score: -399018112.0000
+  Final RMSE: 0.525846
+  Final MAE: 0.366418
+  Final R² Score: -399018112.0000
+
+Test Set: gps_client_002
+----------------------------------------------------------------------
+  Best Round: 3
+  Best RMSE: 0.546736
+  Best R² Score: -56137953050624.0000
+  Final RMSE: 0.546736
+  Final MAE: 0.417254
+  Final R² Score: -56137953050624.0000
+
+======================================================================
+DETAILED RESULTS BY ROUND
+======================================================================
+
+Round 1:
+----------------------------------------------------------------------
+  Server Model - gps_client_000:
+    RMSE: 1.135546
+    MAE: 0.817471
+    R² Score: -122692648.0000
+
+  Server Model - gps_client_001:
+    RMSE: 0.526255
+    MAE: 0.368512
+    R² Score: -432386560.0000
+
+  Server Model - gps_client_002:
+    RMSE: 0.548473
+    MAE: 0.420953
+    R² Score: -60742669697024.0000
+
+  Client-Specific Performance:
+    gps_client_000:
+      RMSE: 1.135546
+      MAE: 0.817471
+
+    client_1:
+      RMSE: 0.524655
+      MAE: 0.367150
+
+    client_2:
+      RMSE: 0.542203
+      MAE: 0.393135
+
+
+Round 2:
+----------------------------------------------------------------------
+  Server Model - gps_client_000:
+    RMSE: 1.135379
+    MAE: 0.816541
+    R² Score: -117123392.0000
+
+  Server Model - gps_client_001:
+    RMSE: 0.526698
+    MAE: 0.367853
+    R² Score: -413015552.0000
+
+  Server Model - gps_client_002:
+    RMSE: 0.547985
+    MAE: 0.419256
+    R² Score: -57813401337856.0000
+
+  Client-Specific Performance:
+    gps_client_000:
+      RMSE: 1.135379
+      MAE: 0.816541
+
+    client_1:
+      RMSE: 0.525823
+      MAE: 0.365293
+
+    client_2:
+      RMSE: 0.546239
+      MAE: 0.418288
+
+
+Round 3:
+----------------------------------------------------------------------
+  Server Model - gps_client_000:
+    RMSE: 1.135084
+    MAE: 0.815714
+    R² Score: -113773088.0000
+
+  Server Model - gps_client_001:
+    RMSE: 0.525846
+    MAE: 0.366418
+    R² Score: -399018112.0000
+
+  Server Model - gps_client_002:
+    RMSE: 0.546736
+    MAE: 0.417254
+    R² Score: -56137953050624.0000
+
+  Client-Specific Performance:
+    gps_client_000:
+      RMSE: 1.135084
+      MAE: 0.815714
+
+    client_1:
+      RMSE: 0.525587
+      MAE: 0.367039
+
+    client_2:
+      RMSE: 0.547343
+      MAE: 0.416816
+
+
+======================================================================
+CLIENT HETEROGENEITY STATISTICS
+======================================================================
+
+Final Round Client Performance Distribution:
+  RMSE:
+    Mean: 0.7360
+    Std: 0.2823
+    Min: 0.5256
+    Max: 1.1351
+    Range: 0.6095
+
+  MAE:
+    Mean: 0.5332
+    Std: 0.2008
+    Min: 0.3670
+    Max: 0.8157
+
+  R2_SCORE:
+    Mean: -18010582595882.6680
+    Std: 25470440828376.4688
+    Min: -54031225454592.0000
+    Max: -113773088.0000
+
+======================================================================
+EFFICIENCY AND PRACTICALITY
+======================================================================
+
+  Total parameters: 55724
+  Model size (MB): 0.2126
+  Estimated memory (MB): 0.4251
+  Communication overhead per round (MB): 0.2172
+
+======================================================================
+NON-IID RESILIENCE
+======================================================================
+
+  Non-IID resilience (0-1, higher=more stable): 0.616399649853729
+

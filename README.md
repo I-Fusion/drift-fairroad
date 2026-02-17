@@ -1,10 +1,16 @@
 # Federated Learning System
 
-Federated Learning system for training time series models on GPS and IMU sensor data and payload based data. 
+Federated Learning system for **time series** (GPS/IMU), **classification** (e.g. attack vs normal from packet sequences), and **payload/CAE** (image denoising) — with configurable aggregation and evaluation for cyber anomaly detection.
+
+**Convention: run all commands from the project root directory** (the folder that contains `fl-time-series/`, `fl-payload/`, `data/`, and `docker/`). Paths in examples are relative to project root.
+
+---
 
 ## 🚀 Quick Start
 
 ```bash
+# From project root:
+
 # 1. Set up virtual environment (recommended)
 python -m venv fl_env
 source fl_env/bin/activate  # On Windows: fl_env\Scripts\activate
@@ -12,52 +18,51 @@ source fl_env/bin/activate  # On Windows: fl_env\Scripts\activate
 # 2. Install dependencies
 pip install -r requirements.txt
 
-# 3. Place the data CSV files in data/ folder
-ls data/
+# 3. Place data in data/ (e.g. data/train/packets or data/train/gps-imu)
 
-# 4. Configure parameters (optional - defaults are set)
-nano config.py
-
-# 5. Run the entire FL system
-python run_fl_system.py
+# 4. Run timeseries FL (classification or regression)
+#    See fl-time-series/README.md; example for GPS/IMU regression:
+python fl-time-series/run_fl_system_time_series.py --data-dir data/train/gps-imu --config config_regression --learning-mode regression
 ```
 
-The system will:
-- Start 1 server + N clients automatically
-- Load and preprocess data with configurable sampling strategy
-- Train using sliding windows (single-pass)
-- Sync periodically with server
-- Track and plot loss for each client and average loss
-- Print metrics for each round
-- Save checkpoints and loss plots automatically
+For packet classification, use `--config config_classification --learning-mode classification` and a packet data dir. See **fl-time-series/README.md** for full options.
 
 
 ## Project Structure
 
-### Essential Files (Need to Deploy)
+All commands below are run from **project root** (`drift-fairroad/`).
 
 ```
-FL/
-├── config.py                  # ⭐ MAIN CONFIGURATION
-├── run_fl_system.py           # ⭐ RUN THIS to start FL system
+drift-fairroad/
+├── data/                      # CSV files and payload images
+├── requirements.txt
 │
-├── fl_client.py               # FL client implementation
-├── fl_server.py               # FL server implementation
-├── data_preprocessing.py      # GPS+IMU data fusion
-├── aggregation.py             # Aggregation strategies
+├── fl-payload/                # CAE (Convolutional Autoencoder) FL
+│   ├── config.py
+│   ├── run_fl_cae_system.py   # Run: cd fl-payload; python run_fl_cae_system.py
+│   ├── evaluate_cae.py       # Eval: cd fl-payload; python evaluate_cae.py ...
+│   ├── fl_server.py, fl_client_cae.py, aggregation.py
+│   ├── models/cae_model.py, cae_model_small.py
+│   ├── checkpoints/
+│   └── README.md
 │
-├── models/
-│   ├── __init__.py
-│   └── lstm_model.py          # Default LSTM model
+├── fl-time-series/            # Classification & regression FL (packet / GPS–IMU)
+│   ├── run_fl_system_time_series.py
+│   ├── fl_server_time_series.py, fl_client_time_series.py
+│   ├── config_classification.py, config_regression.py
+│   ├── data_preprocessing_time_series.py, aggregation.py
+│   ├── models/                # Timeseries model (lstm_model.py)
+│   ├── checkpoints/           # Created by FL runs
+│   ├── plots/                 # Loss plots from FL runs
+│   ├── evaluation_results/    # From evaluate_fl_system.py
+│   ├── evaluate_fl_system.py  # Eval: python fl-time-series/evaluate_fl_system.py ...
+│   ├── EVALUATE_FL_SYSTEM.md
+│   └── README.md
 │
-├── data/                      # Place your CSV files here
-│   ├── your_gps.csv
-│   └── your_imu.csv
-│
-├── checkpoints/               # Auto-created for model checkpoints
-├── plots/                     # Auto-created for loss plots
-│
-└── requirements.txt           # Python dependencies
+└── docker/
+    ├── Dockerfile, Dockerfile.cae
+    ├── docker-compose.yml, docker-compose.cae.yml
+    └── DOCKER.md
 ```
 ---
 
@@ -93,12 +98,78 @@ pip install -r requirements.txt
 pip install torch numpy aiohttp pandas requests matplotlib
 ```
 
+### Docker (optional)
+
+All Docker files are in **`docker/`**. Run from the **project root**:
+
+```bash
+# Timeseries FL
+docker-compose -f docker/docker-compose.yml up --build
+
+# CAE FL (image denoising)
+docker-compose -f docker/docker-compose.cae.yml up --build
+```
+
+See **`docker/DOCKER.md`** for details (build context, volumes, troubleshooting).
+
+
+## Running CAE FL (fl-payload)
+
+From **project root**, run the CAE system with working directory set to `fl-payload` (so its relative paths resolve correctly). Use `;` on Windows PowerShell instead of `&&`:
+
+```bash
+cd fl-payload; python run_fl_cae_system.py --num-rounds 10
+```
+
+Evaluate (also from project root, run from inside `fl-payload`):
+
+```bash
+cd fl-payload; python evaluate_cae.py --checkpoint-dir checkpoints --clean-dir ../data/payload/images/clean --noisy-dir ../data/payload/images/noise --num-clients 3 --output-dir evaluation_results
+```
+
+See **`fl-payload/README.md`** for full options.
+
+
+## FL Time-Series (fl-time-series)
+
+The **`fl-time-series/`** directory provides federated learning for **classification** (e.g. attack vs normal from labeled packet sequences) and **regression** (e.g. GPS/IMU time-series prediction). It targets **cyber anomaly detection** (GPS spoofing, waypoint injection, jamming) with multiple clients training locally and a server aggregating model updates (FedAvg, FedAvgM, or weighted).
+
+- **Classification**: Labeled packet sequences (e.g. SrcPort, DstPort, Length, MsgID, Protocol → Label). Sliding windows + LSTM (or configured model) for binary/multi-class detection.
+- **Regression**: GPS/IMU time-series; same FL server/client layout, different data and loss.
+- **Config**: `config_classification` (packet-only) or `config_regression` (GPS/IMU); selected at runtime with `--config`.
+
+**Quick start** (from project root):
+
+```bash
+# Prepare packet data (if needed)
+python raw_data_processing/prepare_fl_data_for_run_fl.py --packet-file data/network_packets/your_labeled.csv --output data/train/packets
+
+# Run FL classification
+python fl-time-series/run_fl_system_time_series.py --data-dir data/train/packets --config config_classification --learning-mode classification
+
+# Run FL regression (GPS/IMU)
+python fl-time-series/run_fl_system_time_series.py --data-dir data/train/gps-imu --config config_regression --learning-mode regression
+```
+
+Checkpoints go to `fl-time-series/checkpoints/` (and `fl-time-series/checkpoints/clients/` for client checkpoints). Evaluate with `fl-time-series/evaluate_fl_system.py` (see Evaluation section below). See **`fl-time-series/README.md`** for options and data format.
+
+
+## Evaluation (timeseries / classification)
+
+From **project root**, run the comprehensive evaluator (defaults: `fl-time-series/checkpoints`, `fl-time-series/evaluation_results`):
+
+```bash
+python fl-time-series/evaluate_fl_system.py --data-dir data/validate/packets --task classification --config config_classification
+```
+
+See **`fl-time-series/EVALUATE_FL_SYSTEM.md`** for all options and evaluation dimensions.
+
 
 ## Configuration
 
-### Main Configuration File: `config.py`
+### Timeseries FL: `fl-time-series/config_classification.py` and `config_regression.py`
 
-This is the **ONLY** file you need to edit to configure the entire system.
+Use **`config_classification`** for packet (classification) or **`config_regression`** for GPS/IMU regression. Edit the corresponding file in `fl-time-series/` and pass `--config config_classification` or `--config config_regression` to the run script.
 
 ```python
 # ============================================================================
@@ -161,11 +232,12 @@ LEARNING_RATE = 0.001
 BATCH_SIZE = 32
 
 # ============================================================================
-# PATHS
+# PATHS (resolved to fl-time-series/checkpoints and fl-time-series/plots)
 # ============================================================================
 
-CHECKPOINT_DIR = 'checkpoints'
-PLOT_DIR = 'plots'
+_FL_TS_DIR = os.path.dirname(os.path.abspath(__file__))
+CHECKPOINT_DIR = os.path.join(_FL_TS_DIR, 'checkpoints')
+PLOT_DIR = os.path.join(_FL_TS_DIR, 'plots')
 ```
 
 ### Parameter Guide
@@ -195,33 +267,28 @@ PLOT_DIR = 'plots'
 
 ## Running the System
 
+Run all commands from **project root**. See **fl-time-series/README.md** for full options.
+
 ### Method 1: One-Command (Recommended)
 
 ```bash
-python run_fl_system.py
+# Timeseries FL (example: GPS/IMU regression)
+python fl-time-series/run_fl_system_time_series.py --data-dir data/train/gps-imu --config config_regression --learning-mode regression
 ```
 
-This will:
-1. Print configuration
-2. Start FL server
-3. Start all clients automatically
-4. Monitor training progress
-5. Print metrics for each round
-6. Save checkpoints
-7. Print completion summary
+This will start server + clients, train, save checkpoints under `fl-time-series/checkpoints/`, and print metrics.
 
 ### Method 2: Manual (For Debugging)
 
 **Terminal 1 - Server:**
 ```bash
-python fl_server.py
+python fl-time-series/fl_server_time_series.py --host localhost --port 5544 --num-clients 3
 ```
 
-**Terminal 2-4 - Clients:**
+**Terminal 2-4 - Clients** (paths relative to project root; use your data dir and config):
 ```bash
-python fl_client.py --client-id client_1 --gps-file data/your_gps.csv --imu-file data/your_imu.csv --server-url http://localhost:5544
-python fl_client.py --client-id client_2 --gps-file data/your_gps.csv --imu-file data/your_imu.csv --server-url http://localhost:5544
-python fl_client.py --client-id client_3 --gps-file data/your_gps.csv --imu-file data/your_imu.csv --server-url http://localhost:5544
+python fl-time-series/fl_client_time_series.py --client-id client_1 --data-dir data/train/gps-imu --config config_regression --learning-mode regression --server-url http://localhost:5544
+# ... client_2, client_3 with same args
 ```
 
 ---
@@ -230,7 +297,7 @@ python fl_client.py --client-id client_3 --gps-file data/your_gps.csv --imu-file
 
 ### Step 1: Create Your Model File
 
-Create `models/my_model.py`:
+Create **`fl-time-series/models/my_model.py`**:
 
 ```python
 import torch
@@ -261,21 +328,24 @@ class MyCustomModel(nn.Module):
         return sum(p.numel() for p in self.parameters() if p.requires_grad)
 ```
 
-### Step 2: Update config.py
+### Step 2: Update config in `fl-time-series/`
+
+In the config you use (e.g. **`fl-time-series/config_regression.py`**), set:
 
 ```python
-# Change these two lines in config.py:
-MODEL_PATH = 'models.my_model'      # Your model file
-MODEL_CLASS = 'MyCustomModel'        # Your model class
+MODEL_PATH = 'models.my_model'   # Your model file (in fl-time-series/models/)
+MODEL_CLASS = 'MyCustomModel'    # Your model class
 ```
 
 ### Step 3: Run
 
+From project root:
+
 ```bash
-python run_fl_system.py
+python fl-time-series/run_fl_system_time_series.py --data-dir <your-data-dir> --config config_regression --learning-mode regression
 ```
 
-This should run the custom model for the FL training.
+This runs the custom model for the FL training.
 
 ---
 
@@ -386,14 +456,13 @@ TRAINING COMPLETED!
 ======================================================================
 
 📁 Saved Checkpoints (5):
-   checkpoints/server_round_1.pt
-   checkpoints/server_round_2.pt
-   checkpoints/server_round_3.pt
-   checkpoints/server_round_4.pt
-   checkpoints/server_round_5.pt
+   fl-time-series/checkpoints/server_round_1.pt
+   fl-time-series/checkpoints/server_round_2.pt
+   ...
+   fl-time-series/checkpoints/server_round_5.pt
 
 📈 Training Loss Plot:
-   plots/training_loss.png
+   fl-time-series/plots/training_loss.png
 
 ✓ Training artifacts saved successfully!
 ```
@@ -403,17 +472,19 @@ TRAINING COMPLETED!
 The system automatically tracks loss from each client after every training round. Each client's loss curve is recorded and plotted along with an average of the overall loss.
 
 ```
-plots/training_loss.png
+fl-time-series/plots/training_loss.png
 ```
 
 ### Loading Checkpoints
 
+From project root (or add `fl-time-series` to path):
+
 ```python
 import torch
-from models.lstm_model import LSTMModel
+from models.lstm_model import LSTMModel  # when run from fl-time-series or with path set
 
-# Load checkpoint
-checkpoint = torch.load('checkpoints/server_round_5.pt')
+# Load checkpoint (path under fl-time-series)
+checkpoint = torch.load('fl-time-series/checkpoints/server_round_5.pt')
 
 # Create model
 model = LSTMModel(input_size=12, hidden_size=64, num_layers=2)
@@ -425,7 +496,7 @@ print(f"Loaded model from round {checkpoint['round']}")
 ### Checkpoint Cleanup
 
 Before each training run, the system automatically:
-- Checks for existing `.pt` files in `checkpoints/` directory
+- Checks for existing `.pt` files in `fl-time-series/checkpoints/` directory
 - Removes all old checkpoint files
 - Logs the number of files cleaned up
 
@@ -434,6 +505,6 @@ This prevents:
 - Disk space issues from accumulating checkpoints
 - Accidental loading of outdated models
 
-To disable cleanup, comment out the `cleanup_old_checkpoints()` call in [run_fl_system.py](FL/run_fl_system.py:110).
+To disable cleanup, comment out the `cleanup_old_checkpoints()` call in `fl-time-series/run_fl_system_time_series.py`.
 
 ---
