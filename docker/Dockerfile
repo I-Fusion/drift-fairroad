@@ -1,23 +1,35 @@
-FROM python:3.10-slim
+# -----------------------------------------------------------------------------
+# Stage 1: install dependencies (CPU-only PyTorch to save ~500MB+ per image)
+# -----------------------------------------------------------------------------
+FROM python:3.10-slim AS builder
 
-# Set working directory
-WORKDIR /app
-
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements and install Python dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+WORKDIR /build
 
-# Copy application code
-COPY *.py .
-COPY models/ models/
-COPY aggregation.py .
+# CPU-only PyTorch (smaller than default CUDA/cpu+cuda wheel)
+RUN pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu
 
-# Create directories
+COPY requirements-docker.txt .
+RUN pip install --no-cache-dir -r requirements-docker.txt
+
+# -----------------------------------------------------------------------------
+# Stage 2: runtime image (no build-essential, smaller)
+# -----------------------------------------------------------------------------
+FROM python:3.10-slim
+
+WORKDIR /app
+
+# Copy only installed packages from builder (no build tools)
+COPY --from=builder /usr/local/lib/python3.10/site-packages /usr/local/lib/python3.10/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
+
+# Copy timeseries FL application code
+COPY fl-time-series/*.py .
+COPY fl-time-series/models/ models/
+
 RUN mkdir -p checkpoints data
 
 # Environment variables (can be overridden)
@@ -32,40 +44,29 @@ ENV FL_WINDOWS_PER_ROUND=10
 ENV FL_LEARNING_RATE=0.001
 ENV FL_HIDDEN_SIZE=64
 ENV FL_NUM_LAYERS=2
-
-# For server
 ENV FL_SERVER_HOST=0.0.0.0
 ENV FL_SERVER_PORT=8080
 ENV FL_NUM_CLIENTS=3
 ENV FL_MIN_CLIENTS=2
 ENV FL_AGGREGATION=fedavg
 ENV FL_INPUT_SIZE=12
-
-# Expose server port
 EXPOSE 8080
 
-# Run the application
+ENV FL_CONFIG_MODULE=config_regression
 CMD ["sh", "-c", "\
     if [ \"$FL_ROLE\" = \"server\" ]; then \
-        python fl_server.py \
+        python fl_server_time_series.py \
             --host $FL_SERVER_HOST \
             --port $FL_SERVER_PORT \
             --num-clients $FL_NUM_CLIENTS \
             --min-clients $FL_MIN_CLIENTS \
             --aggregation $FL_AGGREGATION \
-            --input-size $FL_INPUT_SIZE \
-            --hidden-size $FL_HIDDEN_SIZE \
-            --num-layers $FL_NUM_LAYERS; \
+            --learning-mode regression \
+            --input-size $FL_INPUT_SIZE; \
     else \
-        python fl_client.py \
+        python fl_client_time_series.py \
             --client-id $FL_CLIENT_ID \
             --gps-file $FL_GPS_FILE \
             --imu-file $FL_IMU_FILE \
-            --server-url $FL_SERVER_URL \
-            --window-size $FL_WINDOW_SIZE \
-            --overlap $FL_OVERLAP \
-            --windows-per-round $FL_WINDOWS_PER_ROUND \
-            --lr $FL_LEARNING_RATE \
-            --hidden-size $FL_HIDDEN_SIZE \
-            --num-layers $FL_NUM_LAYERS; \
+            --server-url $FL_SERVER_URL; \
     fi"]

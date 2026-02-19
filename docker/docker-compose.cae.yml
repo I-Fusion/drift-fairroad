@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # Federated Learning Server for CAE
   fl-server-cae:
@@ -22,6 +20,12 @@ services:
     volumes:
       - ../fl-payload/checkpoints:/app/checkpoints
       - ../fl-payload/plots:/app/plots
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; s=socket.socket(); s.settimeout(2); s.connect(('localhost', 5544)); s.close()"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+      start_period: 15s
 
   # Client 1
   fl-client-cae-1:
@@ -40,7 +44,8 @@ services:
       - FL_BATCH_SIZE=32
       - FL_EPOCHS_PER_ROUND=1
     depends_on:
-      - fl-server-cae
+      fl-server-cae:
+        condition: service_healthy
     networks:
       - fl-cae-network
     volumes:
@@ -64,7 +69,8 @@ services:
       - FL_BATCH_SIZE=32
       - FL_EPOCHS_PER_ROUND=1
     depends_on:
-      - fl-server-cae
+      fl-server-cae:
+        condition: service_healthy
     networks:
       - fl-cae-network
     volumes:
@@ -88,7 +94,8 @@ services:
       - FL_BATCH_SIZE=32
       - FL_EPOCHS_PER_ROUND=1
     depends_on:
-      - fl-server-cae
+      fl-server-cae:
+        condition: service_healthy
     networks:
       - fl-cae-network
     volumes:

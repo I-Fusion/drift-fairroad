@@ -1,5 +1,4 @@
-torch>=2.0.0
-torchvision>=0.25.0
+# Same as requirements.txt but without torch/torchvision (installed from CPU index in Dockerfile)
 numpy>=1.24.0
 aiohttp>=3.8.0
 matplotlib>=3.7.0

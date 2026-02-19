@@ -4,6 +4,8 @@ Federated Learning system for **time series** (GPS/IMU), **classification** (e.g
 
 **Convention: run all commands from the project root directory** (the folder that contains `fl-time-series/`, `fl-payload/`, `data/`, and `docker/`). Paths in examples are relative to project root.
 
+**Requirements:** Python **3.10** (used in Docker and recommended for local runs).
+
 ---
 
 ## 🚀 Quick Start
@@ -72,7 +74,7 @@ drift-fairroad/
 ### Method 1: With Virtual Environment (Recommended)
 
 ```bash
-# Create virtual environment
+# Create virtual environment 
 python -m venv fl_env
 
 # Activate virtual environment

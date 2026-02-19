@@ -4,6 +4,8 @@ This project supports Docker deployment for both **timeseries/regression** and *
 
 **Important:** Run all `docker-compose` commands from the **project root** (parent of `docker/`), using `-f docker/...` so that the build context is the project root and volumes point to the correct paths.
 
+**Contents of `docker/`:** `Dockerfile`, `Dockerfile.cae`, `docker-compose.yml`, `docker-compose.cae.yml`, `DOCKER.md`.
+
 ---
 
 ## Quick Start
@@ -13,12 +15,15 @@ This project supports Docker deployment for both **timeseries/regression** and *
 From the **project root**:
 
 ```bash
+# Build and run (ensure data/ contains GPS/IMU CSVs – see Timeseries System Details)
 docker-compose -f docker/docker-compose.yml up --build
 ```
 
+After the first build, run `docker-compose -f docker/docker-compose.yml up` (or `up -d`) without `--build` to start containers.
+
 This starts:
 - 1 FL server (port 8080)
-- 3 FL clients (GPS/IMU timeseries data)
+- 3 FL clients (GPS/IMU timeseries; data from `data/` mounted at `/app/data`)
 
 ### CAE (Convolutional Autoencoder) FL System
 
@@ -44,7 +49,17 @@ This starts:
 - **`docker/Dockerfile.cae`** - Base image for CAE FL
 - **`docker/docker-compose.cae.yml`** - Compose file for CAE system
 
-Build context for both is the **project root** (`context: ..`), so `COPY requirements.txt` and `COPY fl-payload/` resolve correctly. Dockerfiles are referenced as `dockerfile: docker/Dockerfile` and `dockerfile: docker/Dockerfile.cae`.
+Build context for both is the **project root** (`context: ..`). A **`.dockerignore`** at the project root keeps the context small (excludes `.git`, `__pycache__`, checkpoints, plots, `data/`, etc.). Dockerfiles use **CPU-only PyTorch** and **multi-stage builds** to reduce image size and disk use.
+
+---
+
+## Disk use
+
+Images are kept smaller by:
+- **CPU-only PyTorch** – installed from `https://download.pytorch.org/whl/cpu` (smaller than the default wheel).
+- **Multi-stage builds** – dependencies are installed in a builder stage; only runtime artifacts are copied into the final image (no `build-essential` in the final layer).
+- **`.dockerignore`** – excludes cache, outputs, and large dirs from the build context.
+- **`requirements-docker.txt`** – used in Docker only (torch/torchvision come from the CPU index); `requirements.txt` remains for local installs.
 
 ---
 
@@ -125,7 +140,39 @@ From the **project root**:
 
 ## Timeseries System Details
 
-See `docker/docker-compose.yml` for timeseries/regression FL system configuration. Run from project root with `docker-compose -f docker/docker-compose.yml up --build`.
+### Prerequisites
+
+- **Data:** Place GPS and IMU CSV files under `data/` (e.g. `data/waypoint_injection/` or `data/train/gps-imu/`). The compose file mounts `../data` → `/app/data` in the container.
+- **Paths:** Client env vars `FL_GPS_FILE` and `FL_IMU_FILE` must be paths **inside the container**, e.g. `/app/data/waypoint_injection/your_gps.csv` and `/app/data/waypoint_injection/your_imu.csv`. The default in `docker-compose.yml` uses `waypoint_injection/mission_2_wp_23_attack_add_wp_5_alt_0005_*.csv`. If your files live elsewhere under `data/`, edit the compose file or override the env vars.
+
+### Environment Variables
+
+**Server:** `FL_ROLE=server`, `FL_SERVER_HOST`, `FL_SERVER_PORT=8080`, `FL_NUM_CLIENTS=3`, `FL_MIN_CLIENTS=2`, `FL_AGGREGATION=fedavg`, `FL_INPUT_SIZE=12`.
+
+**Clients:** `FL_ROLE=client`, `FL_CLIENT_ID=client_1|client_2|client_3`, `FL_SERVER_URL=http://fl-server:8080`, `FL_GPS_FILE`, `FL_IMU_FILE` (paths under `/app/data`), plus optional `FL_WINDOW_SIZE`, `FL_OVERLAP`, etc.
+
+### Volumes
+
+- **Server:** `../fl-time-series/checkpoints` → `/app/checkpoints`
+- **Clients:** `../data` → `/app/data:ro`
+
+### Running
+
+From the **project root**:
+
+```bash
+# Foreground (logs in terminal)
+docker-compose -f docker/docker-compose.yml up
+
+# Detached
+docker-compose -f docker/docker-compose.yml up -d
+
+# View logs
+docker-compose -f docker/docker-compose.yml logs -f
+
+# Stop
+docker-compose -f docker/docker-compose.yml down
+```
 
 ---
 
@@ -139,6 +186,10 @@ See `docker/docker-compose.yml` for timeseries/regression FL system configuratio
 
 ### Data Not Found
 
+**Timeseries (GPS/IMU):**
+- Error like `No such file or directory: '/app/data/...gps.csv'` means the path in `FL_GPS_FILE` / `FL_IMU_FILE` does not exist inside the container. The host folder `data/` is mounted at `/app/data`, so use paths like `/app/data/waypoint_injection/filename_gps.csv`. Ensure the files exist under your project’s `data/` directory and that the compose env vars match (including subfolders, e.g. `waypoint_injection/`).
+
+**CAE (images):**
 - Ensure image directories exist at project root: `data/payload/images/clean` and `data/payload/images/noise`
 - Run `docker-compose` from **project root** with `-f docker/docker-compose.cae.yml` so volume paths resolve correctly
 - Verify file permissions
@@ -152,6 +203,7 @@ See `docker/docker-compose.yml` for timeseries/regression FL system configuratio
 
 - Both systems use separate Docker networks (`fl-network` and `fl-cae-network`)
 - Clients connect to server via service name: `http://fl-server-cae:5544`
+- **CAE:** The server has a healthcheck (TCP port 5544). Clients use `condition: service_healthy` so they start only after the server is listening, avoiding "Cannot connect to host" on registration.
 
 ---
 
@@ -159,7 +211,7 @@ See `docker/docker-compose.yml` for timeseries/regression FL system configuratio
 
 ### Building Individual Images
 
-From the **project root** (build context must be project root so `COPY requirements.txt` and `COPY fl-payload/` work):
+From the **project root** (build context must be project root so `COPY requirements-docker.txt`, `COPY fl-time-series/` or `COPY fl-payload/` work):
 
 ```bash
 # CAE system
@@ -198,7 +250,7 @@ docker run -d \
 
 ## Notes
 
-- **CAE system** requires OpenGL libraries (`libgl1-mesa-glx`, `libglib2.0-0`) for image processing
+- **CAE system** requires OpenGL libraries (`libgl1`, `libglib2.0-0`) for image processing
 - **Checkpoints** are saved to `fl-payload/checkpoints/` at project root (mounted into the container)
 - **Server** aggregates when at least `MIN_CLIENTS` (default: 2) have submitted
 - **Clients** use staggered starts (`CLIENT_STAGGER_SEC=10`) to avoid simultaneous requests

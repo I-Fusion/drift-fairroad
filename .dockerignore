@@ -1,0 +1,40 @@
+# Git and IDE
+.git
+.gitignore
+.cursor
+.vscode
+*.md
+!docker/*.md
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info
+.eggs
+*.egg
+.fl_env
+venv
+env
+
+# Build outputs and large runtime data (not needed in image)
+fl-time-series/checkpoints
+fl-time-series/plots
+fl-time-series/evaluation_results
+fl-payload/checkpoints
+fl-payload/plots
+fl-payload/evaluation_results
+checkpoints
+plots
+evaluation_results
+data/
+
+# Docker (avoid copying compose into context)
+docker/docker-compose*.yml
+
+# Misc
+.DS_Store
+*.log
+.thumbs.db
