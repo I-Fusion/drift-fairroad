@@ -437,3 +437,14 @@ This prevents:
 To disable cleanup, comment out the `cleanup_old_checkpoints()` call in [run_fl_system.py](FL/run_fl_system.py:110).
 
 ---
+
+## Citation
+
+@inproceedings{AESSChallenge2026,
+  title={FedROAD: A Federated Learning Resilient Operating Avionics and Drone Benchmark},
+  author={Nagothu, Deeraj and Bao, Yajie and Chen, Genshe and Blasch, Erik and Murray, Victor C. and Blair, W. Dale},
+  booktitle={2026 29th International Conference on Information Fusion (FUSION)},
+  pages={1--7},
+  year={2026},
+  organization={IEEE}
+}
