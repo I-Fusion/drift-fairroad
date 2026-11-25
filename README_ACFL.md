@@ -74,6 +74,35 @@ python run_acfl_system.py --no-layer1 ...               # Layer 2 path
 python run_acfl_system.py --malicious-clients client_2,client_3 ...
 ```
 
+## Generate experiment / mission data
+
+SITL collection and dataset builders (run from this repo root; needs ArduPilot SITL):
+
+```bash
+# Waypoint pools + SITL flights → labeled packet CSVs
+bash collect_validate_missions.sh
+bash collect_drone_missions.sh
+
+# Merge run folders into agent-centric FL packet layout
+python3 build_agent_mission_dataset.py \
+  --train-runs data/sitl_dataset/runs \
+  --extra-runs data/sitl_validate/runs \
+  --extra-runs data/sitl_drone_extra/runs \
+  --output data/sitl_dataset/fl/packets --clean
+
+# Layer-1 counterfactual probes (.pt)
+python3 generate_probe_set.py --mode classification \
+  --packet-file data/network_packets/mission_2_wp_23_attack_add_wp_5_alt_0005_labeled.csv \
+  --output fl-time-series/checkpoints/acfl_probes.pt
+
+# Optional: bootstrap more labeled rows from existing templates
+python3 generate_synthetic_data.py --mode packets --help
+```
+
+Low-level harness: `simulations/collect_dataset.py`, `simulations/scripts/generate_missions.py`,
+`run_simulation.py`, `attacks_sitl.py`, `convert_logs.py`, `packet_pipeline.py`
+(see `simulations/SIMULATION_HARNESS.md`).
+
 ## Tests
 
 ```bash
