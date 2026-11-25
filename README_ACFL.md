@@ -24,6 +24,10 @@ This tree is meant to live at the **root of `drift-fairroad`** (alongside
 | `collect_sitl_dataset.sh` | Primary 10-mission SITL collection (paper recipe) |
 | `collect_validate_missions.sh` / `collect_drone_missions.sh` | +4 / +6 supplemental missions |
 | `build_agent_mission_dataset.py` | Agent–mission FL packet layout |
+| `scripts/run_acfl_mp_sitl_demo.py` | Fly FedAvg vs ACFL 3-UAV Mission Planner scenes |
+| `scripts/merge_mp_multivehicle_tlog.py` | Merge multi-vehicle tlogs (+ EKF/SIM dual sysids, NVF metrics) |
+| `scripts/pack_acfl_mp_demo.py` | Pack MP-ready tlogs / captions under `results/demo_mission_planner/` |
+| `scripts/extract_acfl_mp_tracks.py` | Extract EKF vs SIM tracks from packed runs |
 | `scripts/sync_manuscript_numbers.py` | Regenerate LaTeX tables from JSON summaries |
 | `docs/manuscript/` | Journal manuscript sources |
 | `tests/` | Unit tests for the ACFL package |
@@ -161,6 +165,50 @@ pdflatex main && bibtex main && pdflatex main && pdflatex main
 | `run_drone_5client_*_benchmark.py` | 5-client swarm |
 | `run_drone_combined_layer3_benchmark.py` / `run_drone_full_stack_benchmark.py` | Joint Layer‑1/2/3 |
 
+## Mission Planner demos (FedAvg vs ACFL)
+
+Fly separate controller logs per scene so Mission Planner can show **EKF
+(sysid 1/2/3)** vs **SIM truth (sysid 11/12/13)**. Generated packs land under
+`results/demo_mission_planner/` (gitignored — regenerate locally).
+
+**Not included:** dual-pane / storyboard MP4 renderers, VO/soundtrack scripts,
+or pre-baked demo packs.
+
+### Prerequisites
+
+```bash
+bash simulations/setup_sitl.sh
+export ARDUPILOT_DIR=$HOME/ardupilot
+# Detectors: prefers journal checkpoints if you have run the FL matrix;
+# otherwise falls back to fl-time-series/checkpoints/acfl_examples/*.pt
+```
+
+### Fly and pack
+
+```bash
+# All scenes × both controllers (fedavg, acfl)
+python3 scripts/run_acfl_mp_sitl_demo.py --scene all
+
+# One scene / one controller
+python3 scripts/run_acfl_mp_sitl_demo.py --scene scene_a_gps_spoof --controller acfl
+
+# Merge tlogs (dual sysids + NAMED_VALUE_FLOAT metrics) and pack for MP
+python3 scripts/pack_acfl_mp_demo.py
+```
+
+Play order (open each `mission_planner/<scene>/{fedavg,acfl}/multivehicle_sync.tlog`
+in Mission Planner; enable vehicles 1–3 and 11–13):
+
+1. `scene_c_clean`
+2. `scene_a_gps_spoof`
+3. `scene_b_waypoint_collude`
+4. `scene_d_fleet_collapse`
+5. `scene_e_reference_uav`
+
+Live HUD metrics in the merged tlog (~1 Hz): `EKF_SIM_M`, `MISS_CNT`,
+`HOLD_CNT`, `DET_CNT`, `FAVG_SCR`, `ACFL_SCR`, `ATK_ON`. Load
+`mission.waypoints` via Flight Plan → Load WP beside each tlog if needed.
+
 ## Tests
 
 ```bash
@@ -178,8 +226,10 @@ Under `fl-time-series/checkpoints/`:
 
 **Included:** ACFL package, patched FL client/server (agent–mission loading,
 oversampling, attack hooks, robust aggregators), TinyPacketCNN, journal and
-ablation harnesses, SITL **collection** scripts, manuscript sources, unit tests.
+ablation harnesses, SITL **collection** scripts, Mission Planner **fly/pack**
+scripts, manuscript sources, unit tests.
 
 **Not included:** large generated SITL run trees (`data/sitl_*`),
-`evaluation_results/` caches, and local virtualenvs. Regenerate those with
-the steps above.
+`evaluation_results/` caches, `results/demo_mission_planner/` packs, dual-pane
+film / soundtrack tooling, and local virtualenvs. Regenerate runnable artifacts
+with the steps above.

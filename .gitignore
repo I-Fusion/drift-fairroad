@@ -9,6 +9,7 @@ data/sitl_dataset/
 data/sitl_validate/
 data/sitl_drone_extra/
 evaluation_results/
+results/demo_mission_planner/
 
 # Python
 __pycache__/
