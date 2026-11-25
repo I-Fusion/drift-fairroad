@@ -1,0 +1,9 @@
+# Extra dependencies for ACFL on top of drift-fairroad/requirements.txt
+# Install after: pip install -r requirements.txt
+
+pytest>=7.4.0
+
+# Optional: SITL collection / log parsing (simulations/)
+# pymavlink>=2.4.40
+# MAVProxy>=1.8.70
+# pyshark>=0.6
