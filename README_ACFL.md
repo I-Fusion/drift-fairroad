@@ -16,6 +16,9 @@ a spoofing detection layer on top of it.
 | `acfl/` | Defense package (Layers 1–3) |
 | `run_acfl_system.py` | End-to-end FL runner that uses `acfl.acfl_server` |
 | `evaluate_acfl.py` | Trust-score / round-report evaluation helpers |
+| `fl-time-series/models/tiny_packet_cnn.py` | Drone-scale TinyPacketCNN (~14k params) |
+| `fl-time-series/config_classification_drone.py` | Packet FL profile that selects TinyPacketCNN |
+| `fl-time-series/checkpoints/acfl_examples/` | Example trained ACFL / FedAvg `.pt` checkpoints |
 | `docs/` | Architecture and threat model |
 | `tests/` | Unit tests for the ACFL package |
 | `requirements-acfl.txt` | Extra Python deps beyond `requirements.txt` |
@@ -48,10 +51,23 @@ pip install -r requirements-acfl.txt
 
 ## Quick start
 
-Run from the **drift-fairroad repository root** (after the copy above):
+Run from the **drift-fairroad repository root** (after the copy above).
+
+Drone / ACFL paper profile (**TinyPacketCNN**):
 
 ```bash
-# Packet classification
+# Ensure fl-time-series is on PYTHONPATH, or cd into it first
+python run_acfl_system.py \
+    --data-dir data/train/packets \
+    --config config_classification_drone \
+    --learning-mode classification \
+    --num-rounds 12
+```
+
+Legacy LSTM packet classification / GPS-IMU regression:
+
+```bash
+# Packet classification (LSTM)
 python run_acfl_system.py \
     --data-dir data/train/packets \
     --config config_classification \
