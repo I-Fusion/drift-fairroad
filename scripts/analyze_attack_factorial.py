@@ -56,7 +56,7 @@ def _anova_table(df: pd.DataFrame, formula: str) -> Dict[str, Any]:
 
 def main() -> None:
     if not ROWS.exists():
-        raise SystemExit(f"Missing {ROWS}; run run_drone_attack_factorial.py first")
+        raise SystemExit(f"Missing {ROWS}; run benchmarks/run_drone_attack_factorial.py first")
     rows = json.loads(ROWS.read_text())
     df = pd.DataFrame(rows)
     df = df[df["mean_final_f1"].notna()].copy()
