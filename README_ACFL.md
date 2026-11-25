@@ -196,18 +196,82 @@ python3 scripts/run_acfl_mp_sitl_demo.py --scene scene_a_gps_spoof --controller 
 python3 scripts/pack_acfl_mp_demo.py
 ```
 
-Play order (open each `mission_planner/<scene>/{fedavg,acfl}/multivehicle_sync.tlog`
-in Mission Planner; enable vehicles 1–3 and 11–13):
+### Recommended play order
 
-1. `scene_c_clean`
-2. `scene_a_gps_spoof`
-3. `scene_b_waypoint_collude`
-4. `scene_d_fleet_collapse`
-5. `scene_e_reference_uav`
+For each scene, open the **fedavg** tlog first, then the **acfl** tlog (same
+map setup) so miss→break vs recover-on-detect is obvious:
 
-Live HUD metrics in the merged tlog (~1 Hz): `EKF_SIM_M`, `MISS_CNT`,
-`HOLD_CNT`, `DET_CNT`, `FAVG_SCR`, `ACFL_SCR`, `ATK_ON`. Load
-`mission.waypoints` via Flight Plan → Load WP beside each tlog if needed.
+1. `scene_c_clean` — baseline; EKF ≈ SIM
+2. `scene_a_gps_spoof` — multi-wave GPS
+3. `scene_b_waypoint_collude` — waypoint + GPS
+4. `scene_d_fleet_collapse` — all-3 spoof
+5. `scene_e_reference_uav` — 2-of-3 spoof; clean craft stays locked
+
+Packed files live at:
+
+```text
+results/demo_mission_planner/mission_planner/<scene>/{fedavg,acfl}/
+  multivehicle_sync.tlog   # play this
+  mission.waypoints        # load for map overlay
+  README.md                # per-run notes
+```
+
+### Play telemetry logs in Mission Planner
+
+Use a recent [Mission Planner](https://ardupilot.org/planner/) build (Windows
+is the usual path; Mono/Linux builds work if tlog replay is available).
+
+1. **Load waypoints (optional but recommended)**  
+   Open **Flight Plan → Load WP** and select `mission.waypoints` from the same
+   folder as the tlog. Mission Planner often does **not** draw embedded
+   `MISSION_ITEM_INT` messages from the tlog automatically. Switch back to
+   **Flight Data** so the route stays overlaid while icons move.
+
+2. **Open the merged tlog**  
+   **Flight Data → Ctrl+F → Telemetry Logs** (or **Data → Telemetry Logs**) →
+   browse to `multivehicle_sync.tlog` → open / play.
+
+3. **Show all vehicles**  
+   Enable MAVLink system IDs **1, 2, 3** and **11, 12, 13** in the vehicle /
+   map list (naming varies by MP version — look for “Vehicles” or the map
+   legend). Without 11–13 you only see EKF and cannot judge spoof miss distance.
+
+   | Sysid | Track |
+   |------:|-------|
+   | 1 / 2 / 3 | EKF `GLOBAL_POSITION_INT` (UAV 0 / 1 / 2) |
+   | 11 / 12 / 13 | SIM truth projected as `GLOBAL_POSITION_INT` |
+
+4. **Add live metrics to the HUD**  
+   Merged tlogs emit `NAMED_VALUE_FLOAT` (~1 Hz) on each EKF sysid:
+
+   | Name | Meaning |
+   |------|---------|
+   | `EKF_SIM_M` | EKF vs SIM horizontal error (m) |
+   | `MISS_CNT` | Cumulative miss events |
+   | `HOLD_CNT` | Cumulative detect / hold events |
+   | `DET_CNT` | Cumulative recoveries |
+   | `FAVG_SCR` / `ACFL_SCR` | Latest anomaly scores |
+   | `ATK_ON` | Attack active (0 / 1) |
+
+   In Mission Planner: **Status** tab → **Quick** (double-click a name to pin),
+   HUD **right-click → User Items**, and/or the **Tuning** graph under the map.
+   Pin at least `EKF_SIM_M`, `MISS_CNT`, and `HOLD_CNT`.
+
+5. **Play and compare**  
+   - **Clean:** icons 1↔11, 2↔12, 3↔13 stay stacked; `EKF_SIM_M` stays small.  
+   - **FedAvg miss:** EKF icon slides away from its SIM twin; `EKF_SIM_M`
+     climbs; watch for miss / break outcomes in the packed README.  
+   - **ACFL hold:** spoof stops / mission restores; EKF re-converges toward SIM;
+     `HOLD_CNT` / `DET_CNT` rise while max `EKF_SIM_M` stays bounded.
+
+6. **Playback tips**  
+   - Use MP’s play / pause / speed controls; start near attack onset (~15 s in
+     most attack scenes).  
+   - Keep map zoom wide enough to see all three UAVs and their SIM twins.  
+   - Prefer one controller log at a time; open the matching `fedavg` and `acfl`
+     folders side-by-side on disk so you can swap quickly.  
+   - If only one vehicle appears, re-check that multi-vehicle display is on and
+     sysids 11–13 are not filtered out.
 
 ## Tests
 
