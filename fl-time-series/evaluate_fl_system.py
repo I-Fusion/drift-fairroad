@@ -71,7 +71,8 @@ if SCRIPT_DIR not in sys.path:
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from data_preprocessing_time_series import DataPreprocessorTimeSeries
+from agent_mission_data import build_agent_eval_windows, list_agent_ids
+from data_preprocessing_time_series import DataPreprocessorTimeSeries, split_temporal_windows
 import logging
 
 # Set up logging
@@ -252,6 +253,16 @@ class FLEvaluator:
         
         print(f"Detected task: {self.task}")
         return checkpoints
+
+    def _preprocess_client_data(self, preprocessor: DataPreprocessorTimeSeries):
+        """Preprocess with train-fitted normalization when temporal split is enabled."""
+        use_temporal = bool(getattr(config, "TEMPORAL_TRAIN_SPLIT", False))
+        norm_frac = (1.0 - self.test_split) if use_temporal else None
+        return preprocessor.preprocess(
+            window_size=config.WINDOW_SIZE,
+            overlap=config.OVERLAP,
+            norm_train_fraction=norm_frac,
+        )
     
     def load_test_data(self) -> Dict[str, Tuple[np.ndarray, np.ndarray]]:
         """Load test data for evaluation."""
@@ -290,15 +301,36 @@ class FLEvaluator:
         except Exception:
             prefer_packets = self.task == "classification"
 
+        client_test_files: List[str] = []
         if prefer_packets:
-            client_test_files = sorted(glob.glob(f"{self.data_dir}/packet_client_*.csv"))
-            if not client_test_files:
-                client_test_files = sorted(glob.glob(f"{self.data_dir}/gps_client_*.csv"))
+            agent_ids = list_agent_ids(self.data_dir)
+            if agent_ids:
+                print(f"  Found {len(agent_ids)} agent(s) with per-mission eval splits")
+                for agent_num in agent_ids:
+                    test_key = f"client_{agent_num + 1}"
+                    print(f"    Processing agent_{agent_num:03d} -> {test_key}...")
+                    try:
+                        X_test, y_test, mstats = build_agent_eval_windows(
+                            self.data_dir, agent_num, config,
+                        )
+                        if len(X_test) > 0:
+                            test_data[test_key] = (X_test, y_test)
+                            n_missions = sum(1 for m in mstats if "mission_file" in m)
+                            print(
+                                f"      Eval windows: {X_test.shape[0]} "
+                                f"(from {n_missions} mission(s), temporal suffix)"
+                            )
+                    except Exception as e:
+                        print(f"      Warning: agent_{agent_num:03d}: {e}")
+            else:
+                client_test_files = sorted(glob.glob(f"{self.data_dir}/packet_client_*.csv"))
+                if not client_test_files:
+                    client_test_files = sorted(glob.glob(f"{self.data_dir}/gps_client_*.csv"))
         else:
             client_test_files = sorted(glob.glob(f"{self.data_dir}/gps_client_*.csv"))
             if not client_test_files:
                 client_test_files = sorted(glob.glob(f"{self.data_dir}/packet_client_*.csv"))
-        
+
         if client_test_files:
             print(f"  Found {len(client_test_files)} client data files")
             
@@ -335,13 +367,11 @@ class FLEvaluator:
                             use_labels=False  # Regression for GPS/IMU
                         )
                     
-                    X, y, num_features = preprocessor.preprocess(
-                        window_size=config.WINDOW_SIZE,
-                        overlap=config.OVERLAP
-                    )
+                    X, y, num_features = self._preprocess_client_data(preprocessor)
                     
                     # Split into train/test (use last portion as test)
-                    n_test = int(len(X) * self.test_split)
+                    split_frac = float(getattr(config, "TEST_SPLIT", self.test_split))
+                    n_test = int(len(X) * split_frac)
                     if n_test > 0:
                         X_test = X[-n_test:]
                         y_test = y[-n_test:]
@@ -402,11 +432,9 @@ class FLEvaluator:
                             use_labels=False
                         )
                     
-                    X, y, num_features = preprocessor.preprocess(
-                        window_size=config.WINDOW_SIZE,
-                        overlap=config.OVERLAP
-                    )
-                    n_test = int(len(X) * self.test_split)
+                    X, y, num_features = self._preprocess_client_data(preprocessor)
+                    split_frac = float(getattr(config, "TEST_SPLIT", self.test_split))
+                    n_test = int(len(X) * split_frac)
                     if n_test > 0:
                         all_X_test.append(X[-n_test:])
                         all_y_test.append(y[-n_test:])
@@ -519,6 +547,22 @@ class FLEvaluator:
         # Flatten y_test if needed
         y_true = y_test.flatten() if y_test.ndim > 1 else y_test
         y_true = y_true.astype(int)
+
+        threshold = 0.5
+        tuned_threshold = None
+        if len(np.unique(y_true)) == 2 and len(probabilities) > 0:
+            best_f1 = -1.0
+            for t in np.linspace(0.05, 0.95, 19):
+                preds_t = (probabilities >= t).astype(int)
+                f1_t = f1_score(y_true, preds_t, average="binary", zero_division=0)
+                if f1_t > best_f1:
+                    best_f1 = f1_t
+                    tuned_threshold = float(t)
+            if tuned_threshold is not None and best_f1 > f1_score(
+                y_true, (probabilities >= 0.5).astype(int), average="binary", zero_division=0
+            ):
+                threshold = tuned_threshold
+                predictions = (probabilities >= threshold).astype(int)
         
         # Compute metrics
         accuracy = accuracy_score(y_true, predictions)
@@ -556,7 +600,9 @@ class FLEvaluator:
             'true_positives': int(tp),
             'predictions': predictions.tolist(),
             'probabilities': probabilities.tolist(),
-            'y_true': y_true.tolist()
+            'y_true': y_true.tolist(),
+            'decision_threshold': threshold,
+            'tuned_threshold': tuned_threshold,
         }
         
         return results
@@ -1993,12 +2039,20 @@ class FLEvaluator:
         
         print(f"  Saved text report: {txt_path}")
     
-    def run_full_evaluation(self, output_dir: str = "evaluation_results", rounds: Optional[List[int]] = None, evaluate_clients: bool = True):
+    def run_full_evaluation(
+        self,
+        output_dir: str = "evaluation_results",
+        rounds: Optional[List[int]] = None,
+        evaluate_clients: bool = True,
+        skip_plots: bool = False,
+    ):
         """Run complete evaluation pipeline.
-        
+
         Args:
             output_dir: Directory to save evaluation results
             rounds: Optional list of specific rounds to evaluate
+            evaluate_clients: Evaluate per-client held-out missions
+            skip_plots: Skip matplotlib artifacts (metrics JSON still written)
         """
         print("\n" + "="*70)
         print("COMPREHENSIVE FL SYSTEM EVALUATION")
@@ -2017,33 +2071,37 @@ class FLEvaluator:
         
         # Evaluate all checkpoints
         self.evaluate_all_checkpoints(rounds=rounds, evaluate_clients=evaluate_clients)
-        
-        # Generate plots
-        self.plot_metrics_over_rounds(output_dir)
-        if self.client_evaluation_results:
-            self.plot_client_heterogeneity(output_dir)
-        if self.task == 'classification':
-            self.plot_confusion_matrices(output_dir)
-            self.plot_drift(output_dir)
+
+        if not skip_plots:
+            # Generate plots
+            self.plot_metrics_over_rounds(output_dir)
+            if self.client_evaluation_results:
+                self.plot_client_heterogeneity(output_dir)
+            if self.task == 'classification':
+                self.plot_confusion_matrices(output_dir)
+                self.plot_drift(output_dir)
+            else:
+                self.plot_predictions_vs_actual(output_dir)
         else:
-            self.plot_predictions_vs_actual(output_dir)
-        
+            print("  Skipping plot generation (--skip-plots).")
+
         # Generate report
         self.generate_report(output_dir)
-        
+
         print("\n" + "="*70)
         print("EVALUATION COMPLETE!")
         print("="*70)
         print(f"\nResults saved to: {output_dir}/")
         print("  - evaluation_report.json")
         print("  - evaluation_report.txt")
-        print("  - Metrics plots")
-        if self.client_evaluation_results:
-            print("  - Client heterogeneity plots")
-        if self.task == 'classification':
-            print("  - Confusion matrices")
-        else:
-            print("  - Predictions vs actual plots")
+        if not skip_plots:
+            print("  - Metrics plots")
+            if self.client_evaluation_results:
+                print("  - Client heterogeneity plots")
+            if self.task == 'classification':
+                print("  - Confusion matrices")
+            else:
+                print("  - Predictions vs actual plots")
 
 
 def main():
@@ -2150,6 +2208,11 @@ def main():
         default=None,
         help='JSON file with backdoor_success_rate and optional trigger_accuracy'
     )
+    parser.add_argument(
+        '--skip-plots',
+        action='store_true',
+        help='Skip matplotlib plots; still write evaluation_report.json',
+    )
     args = parser.parse_args()
 
     # Default checkpoint and output dirs to fl-time-series so they stay in this folder
@@ -2191,9 +2254,10 @@ def main():
     
     # Run full evaluation
     evaluator.run_full_evaluation(
-        output_dir=args.output_dir, 
+        output_dir=args.output_dir,
         rounds=args.rounds,
-        evaluate_clients=args.evaluate_clients
+        evaluate_clients=args.evaluate_clients,
+        skip_plots=args.skip_plots,
     )
 
 

@@ -16,14 +16,19 @@ import importlib
 import os
 import sys
 import numpy as np
-from typing import Optional
+from typing import Dict, Optional
 
 # Add fl-time-series (script dir) first so models/ is found here, not at project root
 script_dir = os.path.dirname(os.path.abspath(__file__))
 if script_dir not in sys.path:
     sys.path.insert(0, script_dir)
 
+from agent_mission_data import (
+    build_agent_train_windows,
+    list_mission_files_for_agent,
+)
 from data_preprocessing_time_series import DataPreprocessorTimeSeries
+from fl_reproducibility import get_fl_seed, set_fl_seed
 
 # -----------------------------------------------------------------------------
 # Dynamic config loading
@@ -94,6 +99,10 @@ class FLClientTimeSeries:
         #print(f"[DEBUG {client_id}] Initializing FL Client...")
         logger.info(f"Initializing FL Client: {client_id}")
 
+        # ACFL attack-injection hooks (used for poisoning evaluation only).
+        # Configured via environment variables so the upstream CLI is unchanged.
+        self._last_global_weights = None
+
         # If data_dir is provided, try to load client-specific files
         print(f"[DEBUG {client_id}] Checking data_dir: {data_dir}")
         if data_dir:
@@ -104,11 +113,16 @@ class FLClientTimeSeries:
                 gps_path = os.path.join(data_dir, f"gps_client_{client_num:03d}.csv")
                 imu_path = os.path.join(data_dir, f"imu_client_{client_num:03d}.csv")
                 packet_path = os.path.join(data_dir, f"packet_client_{client_num:03d}.csv")
+                mission_paths = list_mission_files_for_agent(data_dir, client_num)
                 
                 #print(f"[DEBUG {client_id}] Checking for client files:")
                 print(f"  GPS: {gps_path} (exists: {os.path.exists(gps_path)})")
                 print(f"  IMU: {imu_path} (exists: {os.path.exists(imu_path)})")
-                print(f"  Packet: {packet_path} (exists: {os.path.exists(packet_path)})")
+                print(f"  Missions: {len(mission_paths)} file(s)")
+                for mp in mission_paths[:3]:
+                    print(f"    {mp}")
+                if len(mission_paths) > 3:
+                    print(f"    ... +{len(mission_paths) - 3} more")
                 
                 if os.path.exists(gps_path):
                     gps_file = gps_file or gps_path
@@ -118,8 +132,8 @@ class FLClientTimeSeries:
                     imu_file = imu_file or imu_path
                     logger.info(f"Found client IMU file: {imu_path}")
                     #print(f"[DEBUG {client_id}] Using IMU file: {imu_path}")
-                if os.path.exists(packet_path):
-                    packet_file = packet_file or packet_path
+                if os.path.exists(packet_path) or mission_paths:
+                    packet_file = packet_file or (mission_paths[0] if mission_paths else packet_path)
                     logger.info(f"Found client packet file: {packet_path}")
                     #print(f"[DEBUG {client_id}] Using packet file: {packet_path}")
                     # If packet file exists, enable supervised learning by default
@@ -150,28 +164,78 @@ class FLClientTimeSeries:
         #print(f"[DEBUG {client_id}] Data files - GPS: {gps_file}, IMU: {imu_file}, Packet: {packet_file}")
         
         try:
-            #print(f"[DEBUG {client_id}] Creating DataPreprocessorWithPackets...")
-            preprocessor = DataPreprocessorTimeSeries(
-                gps_file=gps_file,
-                imu_file=imu_file,
-                packet_file=packet_file,
-                gps_features=getattr(config, 'GPS_FEATURES', None),
-                imu_features=getattr(config, 'IMU_FEATURES', None),
-                packet_features=getattr(config, 'PACKET_FEATURES', None),
-                timestamp_col=getattr(config, 'TIMESTAMP_COL', 'TimeUS'),
-                packet_timestamp_col=getattr(config, 'PACKET_TIMESTAMP_COL', 'Timestamp'),
-                label_col=getattr(config, 'LABEL_COL', 'Label'),
-                sampling_strategy=getattr(config, 'SAMPLING_STRATEGY', 'downsample'),
-                use_labels=self.is_supervised
+            client_num = self._extract_client_number(client_id)
+            mission_paths = (
+                list_mission_files_for_agent(data_dir, client_num)
+                if data_dir and client_num is not None
+                else []
             )
-            #print(f"[DEBUG {client_id}] DataPreprocessor created, calling preprocess()...")
-            logger.info("DataPreprocessor initialized, starting preprocessing...")
-            self.X, self.y, self.num_features = preprocessor.preprocess(
-                config.WINDOW_SIZE,
-                config.OVERLAP
-            )
-            #print(f"[DEBUG {client_id}] Preprocessing complete! X shape: {self.X.shape}, y shape: {self.y.shape}, features: {self.num_features}")
-            logger.info("Data preprocessing completed successfully")
+            if self.is_supervised and data_dir and mission_paths:
+                logger.info(
+                    "Loading %d mission(s) for %s (per-mission temporal train split)",
+                    len(mission_paths), client_id,
+                )
+                seed = int(getattr(config, "OVERSAMPLE_SEED", 42))
+                if client_num is not None:
+                    seed += client_num
+                self.X, self.y, self.num_features, self.mission_stats = build_agent_train_windows(
+                    data_dir,
+                    client_num,
+                    config,
+                    oversample=True,
+                    seed=seed,
+                )
+                self.temporal_split_stats = {
+                    "mode": "per_mission_temporal",
+                    "missions": self.mission_stats,
+                }
+                self.window_oversample_stats = next(
+                    (m.get("oversample") for m in self.mission_stats if "oversample" in m),
+                    None,
+                )
+                logger.info("Data preprocessing completed successfully")
+            else:
+                preprocessor = DataPreprocessorTimeSeries(
+                    gps_file=gps_file,
+                    imu_file=imu_file,
+                    packet_file=packet_file,
+                    gps_features=getattr(config, 'GPS_FEATURES', None),
+                    imu_features=getattr(config, 'IMU_FEATURES', None),
+                    packet_features=getattr(config, 'PACKET_FEATURES', None),
+                    timestamp_col=getattr(config, 'TIMESTAMP_COL', 'TimeUS'),
+                    packet_timestamp_col=getattr(config, 'PACKET_TIMESTAMP_COL', 'Timestamp'),
+                    label_col=getattr(config, 'LABEL_COL', 'Label'),
+                    sampling_strategy=getattr(config, 'SAMPLING_STRATEGY', 'downsample'),
+                    use_labels=self.is_supervised
+                )
+                logger.info("DataPreprocessor initialized, starting preprocessing...")
+                from data_preprocessing_time_series import oversample_attack_windows, split_temporal_windows
+                test_split = float(getattr(config, "TEST_SPLIT", 0.2))
+                use_temporal_split = bool(getattr(config, "TEMPORAL_TRAIN_SPLIT", False))
+                norm_train_fraction = (1.0 - test_split) if use_temporal_split else None
+                self.X, self.y, self.num_features = preprocessor.preprocess(
+                    config.WINDOW_SIZE,
+                    config.OVERLAP,
+                    norm_train_fraction=norm_train_fraction,
+                )
+                self.mission_stats = None
+                self.temporal_split_stats = None
+                if use_temporal_split:
+                    self.X, self.y, _, _, self.temporal_split_stats = split_temporal_windows(
+                        self.X, self.y, test_split=test_split,
+                    )
+                self.window_oversample_stats = None
+                if self.is_supervised and getattr(config, 'OVERSAMPLE_ATTACK_WINDOWS', False):
+                    seed = int(getattr(config, 'OVERSAMPLE_SEED', 42))
+                    if client_num is not None:
+                        seed += client_num
+                    self.X, self.y, self.window_oversample_stats = oversample_attack_windows(
+                        self.X,
+                        self.y,
+                        target_attack_ratio=getattr(config, 'TARGET_ATTACK_WINDOW_RATIO', 0.25),
+                        seed=seed,
+                    )
+                logger.info("Data preprocessing completed successfully")
         except Exception as e:
             #print(f"[DEBUG {client_id}] ERROR in preprocessing: {e}")
             logger.error(f"Data preprocessing failed: {e}", exc_info=True)
@@ -182,6 +246,11 @@ class FLClientTimeSeries:
         self.total_windows = len(self.X)
         #print(f"[DEBUG {client_id}] Total windows: {self.total_windows}")
         logger.info(f"Total windows available: {self.total_windows}")
+
+        self.max_fl_rounds = int(os.environ.get("FL_MAX_ROUNDS", "0")) or None
+        self.mission_context_stats = self._compute_mission_context(
+            packet_file, gps_file, imu_file
+        )
 
         # Determine output size based on learning mode
         #print(f"[DEBUG {client_id}] Determining output size...")
@@ -206,6 +275,13 @@ class FLClientTimeSeries:
         # Load model dynamically from config
         #print(f"[DEBUG {client_id}] Loading model from {config.MODEL_PATH}.{config.MODEL_CLASS}...")
         logger.info(f"Loading model from {config.MODEL_PATH}.{config.MODEL_CLASS}")
+        client_num = self._extract_client_number(client_id) or 0
+        base_seed = get_fl_seed()
+        if base_seed is not None:
+            set_fl_seed(base_seed + client_num)
+            self.fl_seed = base_seed + client_num
+        else:
+            self.fl_seed = None
         try:
             model_module = importlib.import_module(config.MODEL_PATH)
             model_class = getattr(model_module, config.MODEL_CLASS)
@@ -237,9 +313,18 @@ class FLClientTimeSeries:
         if self.is_supervised:
             # For binary classification
             if output_size == 1:
-                # Binary classification with single output (sigmoid)
-                # BCEWithLogitsLoss expects float targets (0.0 or 1.0)
-                self.criterion = nn.BCEWithLogitsLoss()
+                labels = np.asarray(self.y).reshape(-1)
+                pos = float((labels >= 0.5).sum())
+                neg = float(len(labels) - pos)
+                if pos > 0 and neg > 0:
+                    pos_weight = torch.tensor([neg / pos], device=self.device)
+                    self.criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+                    logger.info(
+                        "Class-balanced BCE loss (pos_weight=%.2f, attack windows=%.1f%%)",
+                        pos_weight.item(), 100.0 * pos / len(labels),
+                    )
+                else:
+                    self.criterion = nn.BCEWithLogitsLoss()
             else:
                 # Multi-class classification
                 # CrossEntropyLoss expects long targets (class indices)
@@ -252,9 +337,44 @@ class FLClientTimeSeries:
 
         # Track current position
         self.current_window_idx = 0
+
+        self._setup_acfl_attack()
         
         # Print detailed data information (after all initialization is complete)
         self._print_data_info()
+
+    def _compute_mission_context(
+        self,
+        packet_file: Optional[str],
+        gps_file: Optional[str],
+        imu_file: Optional[str],
+    ) -> Dict[str, float]:
+        """Derive Layer-2 mission-context features from local labeled data."""
+        attack_ratio = 0.0
+        if self.is_supervised and self.y is not None:
+            labels = np.asarray(self.y).reshape(-1)
+            attack_ratio = float((labels >= 0.5).mean()) if len(labels) else 0.0
+        elif packet_file and os.path.isfile(packet_file):
+            import pandas as pd
+            df = pd.read_csv(packet_file, usecols=["Label"])
+            attack_ratio = float(df["Label"].mean())
+
+        benign = float(np.clip(1.0 - attack_ratio * 3.0, 0.0, 1.0))
+        return {
+            "gnss_imu_consistency": benign,
+            "mavlink_state_consistency": benign,
+            "link_health": float(np.clip(1.0 - attack_ratio * 2.0, 0.0, 1.0)),
+            "attack_label_ratio": attack_ratio,
+        }
+
+    def _mission_context_headers(self) -> Dict[str, str]:
+        ctx = getattr(self, "mission_context_stats", {}) or {}
+        return {
+            "X-GNSS-IMU-Consistency": f"{ctx.get('gnss_imu_consistency', 1.0):.4f}",
+            "X-MAVLink-Consistency": f"{ctx.get('mavlink_state_consistency', 1.0):.4f}",
+            "X-Link-Health": f"{ctx.get('link_health', 1.0):.4f}",
+            "X-Attack-Ratio": f"{ctx.get('attack_label_ratio', 0.0):.4f}",
+        }
 
     def _extract_client_number(self, client_id: str) -> Optional[int]:
         """Extract client number from client_id (e.g., 'client_1' -> 1, 'client_001' -> 1)."""
@@ -278,6 +398,11 @@ class FLClientTimeSeries:
         # Basic statistics
         print(f"\nDataset Statistics:")
         print(f"  Total Windows: {self.total_windows}")
+        if getattr(self, "temporal_split_stats", None) and self.temporal_split_stats.get("applied"):
+            ts = self.temporal_split_stats
+            print(f"  Temporal Split: train {ts['windows_train']} / "
+                  f"held-out eval {ts['windows_test']} (of {ts['windows_total']} total)")
+            print(f"  Train attack ratio: {100.0 * ts['train_attack_ratio']:.1f}%")
         print(f"  Window Size: {config.WINDOW_SIZE} timesteps")
         print(f"  Overlap: {config.OVERLAP} timesteps")
         print(f"  Features per timestep: {self.num_features}")
@@ -364,6 +489,155 @@ class FLClientTimeSeries:
             traceback.print_exc()
             return False
 
+    def _setup_acfl_attack(self):
+        """Configure poisoning attack from environment variables (ACFL evaluation).
+
+        Recognized variables:
+          ACFL_ATTACK_CLIENTS : comma-separated client IDs that are malicious
+          ACFL_ATTACK_TYPE    : gradient_scaling | byzantine | backdoor |
+                                model_replacement | label_flip | none
+          ACFL_ATTACK_SCALE   : scale factor for scaling/replacement attacks
+          ACFL_ATTACK_NOISE   : std-dev for byzantine noise
+          ACFL_BACKDOOR_POISON_FRACTION : fraction of benign windows to poison
+          ACFL_BACKDOOR_TRIGGER_VALUE   : trigger magnitude (matches probes)
+          ACFL_BACKDOOR_TARGET_LABEL    : label for poisoned windows (0=benign)
+          ACFL_LABEL_FLIP_FRACTION      : fraction of local labels to flip
+        """
+        attack_clients = {
+            c.strip()
+            for c in os.environ.get("ACFL_ATTACK_CLIENTS", "").split(",")
+            if c.strip()
+        }
+        self.is_malicious = self.client_id in attack_clients
+        self.attack_type = os.environ.get("ACFL_ATTACK_TYPE", "none")
+        self.attack_simulator = None
+        self._current_fl_round = 0
+
+        if not self.is_malicious or self.attack_type == "none":
+            return
+
+        try:
+            acfl_root = os.path.dirname(
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            )
+            if acfl_root not in sys.path:
+                sys.path.insert(0, acfl_root)
+            from acfl.attacks import AttackType, ClientAttackSimulator
+
+            client_num = self._extract_client_number(self.client_id) or 0
+            attack_seed_base = (get_fl_seed(42) or 42) + client_num
+
+            self.attack_simulator = ClientAttackSimulator(
+                attack_type=AttackType(self.attack_type),
+                scale_factor=float(os.environ.get("ACFL_ATTACK_SCALE", "10.0")),
+                noise_std=float(os.environ.get("ACFL_ATTACK_NOISE", "1.0")),
+                backdoor_scale=float(os.environ.get("ACFL_ATTACK_SCALE", "5.0")),
+                backdoor_data_poison_only=self.attack_type == "backdoor",
+                attack_seed_base=attack_seed_base,
+            )
+            if self.attack_type == "backdoor":
+                self._apply_backdoor_data_poison()
+            elif self.attack_type == "label_flip":
+                self._apply_label_flip_data_poison()
+            logger.warning(
+                f"[ACFL-ATTACK] {self.client_id} configured as MALICIOUS "
+                f"(attack={self.attack_type})"
+            )
+        except Exception as e:
+            logger.error(f"[ACFL-ATTACK] Failed to set up attack: {e}")
+            self.attack_simulator = None
+
+    def _apply_backdoor_data_poison(self):
+        """Stamp probe-aligned triggers into benign training windows."""
+        if not self.is_supervised or self.X is None or self.y is None:
+            logger.warning(
+                "[ACFL-ATTACK] %s backdoor skipped: supervised packet data required",
+                self.client_id,
+            )
+            return
+
+        acfl_root = os.path.dirname(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        )
+        if acfl_root not in sys.path:
+            sys.path.insert(0, acfl_root)
+        from acfl.backdoor_data import poison_training_windows
+
+        client_num = self._extract_client_number(self.client_id) or 0
+        seed = (get_fl_seed(42) or 42) + client_num
+        fraction = float(os.environ.get("ACFL_BACKDOOR_POISON_FRACTION", "0.35"))
+        trigger_value = float(os.environ.get("ACFL_BACKDOOR_TRIGGER_VALUE", "3.0"))
+        target_label = float(os.environ.get("ACFL_BACKDOOR_TARGET_LABEL", "0.0"))
+
+        self.X, self.y, stats = poison_training_windows(
+            self.X,
+            self.y,
+            poison_fraction=fraction,
+            target_label=target_label,
+            trigger_value=trigger_value,
+            seed=seed,
+        )
+        self.backdoor_poison_stats = stats
+        logger.warning(
+            "[ACFL-ATTACK] %s backdoor data poison: %d/%d benign windows "
+            "(target_label=%.0f, trigger=%.1f)",
+            self.client_id,
+            stats["num_poisoned"],
+            stats.get("benign_windows", 0),
+            target_label,
+            trigger_value,
+        )
+
+    def _apply_label_flip_data_poison(self):
+        """Flip supervised labels on a fraction of local training windows."""
+        if not self.is_supervised or self.X is None or self.y is None:
+            logger.warning(
+                "[ACFL-ATTACK] %s label_flip skipped: supervised packet data required",
+                self.client_id,
+            )
+            return
+
+        acfl_root = os.path.dirname(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        )
+        if acfl_root not in sys.path:
+            sys.path.insert(0, acfl_root)
+        from acfl.label_flip_data import flip_training_labels
+
+        client_num = self._extract_client_number(self.client_id) or 0
+        seed = (get_fl_seed(42) or 42) + client_num
+        fraction = float(os.environ.get("ACFL_LABEL_FLIP_FRACTION", "0.5"))
+
+        self.X, self.y, stats = flip_training_labels(
+            self.X,
+            self.y,
+            flip_fraction=fraction,
+            seed=seed,
+        )
+        self.label_flip_stats = stats
+        logger.warning(
+            "[ACFL-ATTACK] %s label_flip: %d/%d windows flipped",
+            self.client_id,
+            stats["num_flipped"],
+            stats.get("total_windows", 0),
+        )
+
+    def _apply_acfl_attack(self, weights):
+        """Apply the configured poisoning attack to outgoing weights."""
+        if not getattr(self, "is_malicious", False) or self.attack_simulator is None:
+            return weights
+        global_w = self._last_global_weights or weights
+        attacked = self.attack_simulator.attack_update(
+            weights,
+            global_w,
+            round_number=getattr(self, "_current_fl_round", 0),
+        )
+        logger.warning(
+            f"[ACFL-ATTACK] {self.client_id} poisoned its update "
+            f"({self.attack_type})"
+        )
+        return attacked
+
     async def get_global_model(self, session: aiohttp.ClientSession, round_num: int = 0) -> bool:
         """Download global model from server."""
         url = f"{self.server_url}/get_model"
@@ -379,10 +653,17 @@ class FLClientTimeSeries:
                 if response.status == 200:
                     #print(f"[DEBUG {self.client_id}] Reading weights bytes...")
                     weights_bytes = await response.read()
-                    #print(f"[DEBUG {self.client_id}] Weights size: {len(weights_bytes)} bytes, deserializing...")
-                    weights = pickle.loads(weights_bytes)
-                    #print(f"[DEBUG {self.client_id}] Setting model weights...")
+                    from fl_comm import deserialize_weights, is_gzip_payload
+                    weights = deserialize_weights(
+                        weights_bytes, compressed=is_gzip_payload(weights_bytes),
+                    )
                     self.model.set_weights(weights)
+                    # Snapshot global weights so malicious clients can craft
+                    # delta-based poisoning relative to the current global model.
+                    if getattr(self, "is_malicious", False):
+                        self._last_global_weights = {
+                            k: v.clone() for k, v in weights.items()
+                        }
                     #print(f"[DEBUG {self.client_id}] Global model received and set successfully")
                     logger.info(f"Received global model for round {round_num}")
                     return True
@@ -402,135 +683,92 @@ class FLClientTimeSeries:
             traceback.print_exc()
             return False
 
-    def train_on_windows(self, start_idx: int, end_idx: int) -> float:
-        """Train on windows (single pass)."""
-        #print(f"[DEBUG {self.client_id}] Training on windows {start_idx} to {end_idx}...")
+    def train_on_windows(
+        self, start_idx: int, end_idx: int, round_num: int = 0
+    ) -> float:
+        """Train on windows with mini-batch SGD and multiple local epochs."""
         self.model.train()
+        indices = list(range(start_idx, min(end_idx, self.total_windows)))
+        if not indices:
+            return 0.0
+
+        local_epochs = max(1, int(getattr(config, "LOCAL_EPOCHS", 1)))
+        batch_size = max(1, int(getattr(config, "BATCH_SIZE", 32)))
         total_loss = 0.0
-        num_windows = 0
+        num_batches = 0
+        shuffle_seed = None
+        if self.fl_seed is not None:
+            shuffle_seed = int(self.fl_seed) + int(round_num) * 1000 + int(start_idx)
 
-        for window_idx in range(start_idx, end_idx):
-            if window_idx >= self.total_windows:
-                break
+        for epoch in range(local_epochs):
+            order = indices.copy()
+            if epoch > 0 and shuffle_seed is not None:
+                rng = np.random.default_rng(shuffle_seed + epoch)
+                rng.shuffle(order)
+            elif epoch > 0:
+                np.random.shuffle(order)
 
-            # Get window
-            X_window = torch.FloatTensor(self.X[window_idx:window_idx+1]).to(self.device)
-            y_window = self.y[window_idx:window_idx+1]
+            for batch_start in range(0, len(order), batch_size):
+                batch_idx = order[batch_start: batch_start + batch_size]
+                X_batch = torch.FloatTensor(self.X[batch_idx]).to(self.device)
+                y_batch = np.asarray(self.y[batch_idx]).reshape(-1)
 
-            # Prepare target based on learning mode
-            if self.is_supervised:
-                # Classification: convert to appropriate tensor format
-                y_window_array = y_window if isinstance(y_window, np.ndarray) else np.array(y_window)
-                
-                # Handle different label formats
-                if y_window_array.ndim == 0:
-                    # Scalar
-                    label_value = float(y_window_array.item())
-                elif y_window_array.ndim == 1:
-                    # 1D array - take first element
-                    label_value = float(y_window_array[0])
+                if self.is_supervised:
+                    if self.model.output_size == 1:
+                        y_tensor = torch.FloatTensor(y_batch.astype(np.float32)).to(self.device)
+                    else:
+                        y_tensor = torch.LongTensor(y_batch.astype(np.int64)).to(self.device)
                 else:
-                    # Multi-dimensional - flatten and take first
-                    label_value = float(y_window_array.flatten()[0])
-                
-                # For binary classification with BCEWithLogitsLoss, use FloatTensor
-                if self.model.output_size == 1:
-                    # Keep as 1D tensor [label_value] to match model output shape
-                    y_tensor = torch.FloatTensor([label_value]).to(self.device)
-                else:
-                    # Multi-class: use LongTensor
-                    y_tensor = torch.LongTensor([int(label_value)]).to(self.device)
-            else:
-                # Regression: next timestep prediction
-                y_window_array = y_window if isinstance(y_window, np.ndarray) else np.array(y_window)
-                y_tensor = torch.FloatTensor(y_window_array).to(self.device)
-                # Squeeze if needed to match output shape
-                if y_tensor.dim() > 1:
-                    y_tensor = y_tensor.squeeze()
+                    y_tensor = torch.FloatTensor(y_batch).to(self.device)
 
-            # Train
-            self.optimizer.zero_grad()
-            output = self.model(X_window)
-            
-            # Handle output shape for classification
-            if self.is_supervised:
-                # For binary classification with single output
-                # Ensure output and target have matching shapes
-                # Both should be 1D tensors with 1 element for BCEWithLogitsLoss
-                
-                # Normalize output to 1D
-                if output.dim() == 0:
-                    # Scalar -> make it [1]
-                    output = output.unsqueeze(0)
-                elif output.dim() > 1:
-                    # Multi-dim -> squeeze to 1D
-                    output = output.squeeze()
-                    if output.dim() == 0:
-                        output = output.unsqueeze(0)
-                
-                # Normalize target to 1D
-                if y_tensor.dim() == 0:
-                    # Scalar -> make it [1]
-                    y_tensor = y_tensor.unsqueeze(0)
-                elif y_tensor.dim() > 1:
-                    # Multi-dim -> squeeze to 1D
-                    y_tensor = y_tensor.squeeze()
+                self.optimizer.zero_grad()
+                output = self.model(X_batch)
+
+                if self.is_supervised and self.model.output_size == 1:
+                    if output.dim() > 1:
+                        output = output.squeeze(-1)
                     if y_tensor.dim() == 0:
                         y_tensor = y_tensor.unsqueeze(0)
-                
-                # Final check: both should be 1D with same size
-                if output.dim() != y_tensor.dim() or output.size(0) != y_tensor.size(0):
-                    # If sizes don't match, try to align
-                    if output.size(0) == 1 and y_tensor.size(0) == 1:
-                        # Both are [1], that's fine
-                        pass
-                    elif output.size(0) == 1:
-                        # Output is [1], target might be different - squeeze output to match
-                        if y_tensor.dim() == 0:
-                            output = output.squeeze(0)
-                    elif y_tensor.size(0) == 1:
-                        # Target is [1], output might be different - squeeze target to match
-                        if output.dim() == 0:
-                            y_tensor = y_tensor.squeeze(0)
-            else:
-                # For regression, ensure output matches target shape
-                if output.dim() > 2:
-                    output = output.squeeze()
-                # Ensure output and target have same shape
-                if output.shape != y_tensor.shape:
-                    # Try to reshape output to match target
-                    if output.numel() == y_tensor.numel():
+                elif not self.is_supervised:
+                    if output.dim() > 2:
+                        output = output.squeeze()
+                    if output.shape != y_tensor.shape and output.numel() == y_tensor.numel():
                         output = output.view(y_tensor.shape)
 
-            loss = self.criterion(output, y_tensor)
-            loss.backward()
-            self.optimizer.step()
+                loss = self.criterion(output, y_tensor)
+                loss.backward()
+                self.optimizer.step()
 
-            total_loss += loss.item()
-            num_windows += 1
+                total_loss += loss.item()
+                num_batches += 1
 
-        avg_loss = total_loss / num_windows if num_windows > 0 else 0.0
-        #print(f"[DEBUG {self.client_id}] Training complete: {num_windows} windows, avg loss: {avg_loss:.6f}")
-        return avg_loss
+        return total_loss / num_batches if num_batches > 0 else 0.0
 
-    async def submit_update(self, session: aiohttp.ClientSession, loss: float) -> bool:
+    async def submit_update(self, session: aiohttp.ClientSession, loss: float,
+                            session_complete: bool = False) -> bool:
         """Submit model update to server."""
         url = f"{self.server_url}/submit_update"
 
         #print(f"[DEBUG {self.client_id}] Preparing to submit update (loss: {loss:.6f})...")
         weights = self.model.get_weights()
-        #print(f"[DEBUG {self.client_id}] Got model weights, serializing...")
-        weights_bytes = pickle.dumps(weights)
-        #print(f"[DEBUG {self.client_id}] Weights serialized: {len(weights_bytes)} bytes")
+        # ACFL evaluation: malicious clients poison their update here.
+        weights = self._apply_acfl_attack(weights)
+        from fl_comm import serialize_weights, transfer_settings_from_config
+        use_fp16, use_gzip = transfer_settings_from_config(config)
+        weights_bytes = serialize_weights(
+            weights, use_fp16=use_fp16, compress=use_gzip,
+        )
 
         headers = {
             "X-Client-ID": self.client_id,
             "X-Num-Samples": str(config.WINDOWS_PER_ROUND),
             "X-Loss": str(loss),
-            "Content-Type": "application/octet-stream"
+            "Content-Type": "application/octet-stream",
+            **self._mission_context_headers(),
         }
         
-        # Add learning mode header if supervised
+        if session_complete:
+            headers["X-Session-Complete"] = "1"
         if self.is_supervised:
             headers["X-Learning-Mode"] = "classification"
         else:
@@ -565,6 +803,8 @@ class FLClientTimeSeries:
             
     def save_checkpoint(self, round_num: int, loss: float):
         """Save client model checkpoint."""
+        if not getattr(config, "SAVE_CLIENT_CHECKPOINTS", True):
+            return
         try:
             checkpoint_dir = getattr(config, 'CHECKPOINT_DIR', 'checkpoints')
             os.makedirs(checkpoint_dir, exist_ok=True)
@@ -626,6 +866,12 @@ class FLClientTimeSeries:
             #print(f"[DEBUG {self.client_id}] Entering training loop (current_window_idx: {self.current_window_idx}, total_windows: {self.total_windows})...")
             while self.current_window_idx < self.total_windows:
                 round_num += 1
+                if self.max_fl_rounds and round_num > self.max_fl_rounds:
+                    logger.info(
+                        "%s reached FL_MAX_ROUNDS=%d — stopping",
+                        self.client_id, self.max_fl_rounds,
+                    )
+                    break
                 #print(f"[DEBUG {self.client_id}] ===== Round {round_num} =====")
                 
                 # Safety check to prevent infinite loops
@@ -667,7 +913,9 @@ class FLClientTimeSeries:
                 # Train
                 #print(f"[DEBUG {self.client_id}] Starting training...")
                 logger.info(f"Training on windows {self.current_window_idx}-{end_idx}...")
-                loss = self.train_on_windows(self.current_window_idx, end_idx)
+                loss = self.train_on_windows(
+                    self.current_window_idx, end_idx, round_num=round_num
+                )
                 mode_str = "Classification" if self.is_supervised else "Regression"
                 #print(f"[DEBUG {self.client_id}] Training complete, loss: {loss:.6f}")
                 logger.info(f"Round {round_num} {mode_str} Loss: {loss:.6f}")
@@ -675,7 +923,9 @@ class FLClientTimeSeries:
                 # Submit
                 #print(f"[DEBUG {self.client_id}] Submitting update...")
                 logger.info(f"Submitting update for round {round_num}...")
-                if not await self.submit_update(session, loss):
+                self._current_fl_round = round_num
+                done = self.current_window_idx + (end_idx - self.current_window_idx) >= self.total_windows
+                if not await self.submit_update(session, loss, session_complete=done):
                     consecutive_failures += 1
                     #print(f"[DEBUG {self.client_id}] Failed to submit update (failure {consecutive_failures}/{max_consecutive_failures})")
                     logger.warning(f"Failed to submit update (failure {consecutive_failures}/{max_consecutive_failures})")

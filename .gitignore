@@ -1,0 +1,27 @@
+# Local envs
+acfl_env/
+fl_env/
+.venv/
+venv/
+
+# Generated SITL / FL artifacts (collect locally — not shipped)
+data/sitl_dataset/
+data/sitl_validate/
+data/sitl_drone_extra/
+evaluation_results/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# LaTeX build junk under manuscript
+docs/manuscript/*.aux
+docs/manuscript/*.bbl
+docs/manuscript/*.blg
+docs/manuscript/*.log
+docs/manuscript/*.out
+docs/manuscript/*.toc
+docs/manuscript/*.synctex.gz

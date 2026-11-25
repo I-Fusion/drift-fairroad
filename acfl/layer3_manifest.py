@@ -27,7 +27,10 @@ def load_network_attack_types(acfl_root: Optional[str] = None) -> Dict[str, str]
     or ``none``.
     """
     root = acfl_root or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    drift = os.path.join(root, "drift-fairroad", "data")
+    if os.path.isdir(os.path.join(root, "fl-time-series")):
+        drift = os.path.join(root, "data")
+    else:
+        drift = os.path.join(root, "drift-fairroad", "data")
     drone_attack: Dict[str, str] = {}
     for rel in (
         os.path.join("sitl_dataset", "manifest.json"),
