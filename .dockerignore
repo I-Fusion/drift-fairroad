@@ -29,6 +29,11 @@ fl-payload/evaluation_results
 checkpoints
 plots
 evaluation_results
+results/
+benchmarks/
+docs/
+simulations/
+tests/
 data/
 
 # Docker (avoid copying compose into context)

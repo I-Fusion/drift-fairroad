@@ -4,7 +4,9 @@ This project supports Docker deployment for both **timeseries/regression** and *
 
 **Important:** Run all `docker-compose` commands from the **project root** (parent of `docker/`), using `-f docker/...` so that the build context is the project root and volumes point to the correct paths.
 
-**Contents of `docker/`:** `Dockerfile`, `Dockerfile.cae`, `docker-compose.yml`, `docker-compose.cae.yml`, `DOCKER.md`.
+**Contents of `docker/`:** `Dockerfile`, `Dockerfile.cae`, `Dockerfile.acfl`,
+`docker-compose.yml`, `docker-compose.cae.yml`, `docker-compose.acfl.yml`,
+`entrypoint_acfl.sh`, `DOCKER.md`.
 
 ---
 
@@ -37,6 +39,25 @@ This starts:
 - 1 FL server (port 5544)
 - 3 FL clients (clean/noisy image pairs)
 
+### ACFL (packet classification + poisoning defense)
+
+From the **project root** (needs stock `data/train/packets/packet_client_00{0,1,2}.csv`):
+
+```bash
+docker compose -f docker/docker-compose.acfl.yml up --build
+```
+
+This starts:
+- 1 ACFL server (port **8090**) with Layers 1–3
+- 3 FL clients on `config_classification_drone` (TinyPacketCNN)
+
+Optional Byzantine poisoning on `client_2`:
+
+```bash
+ACFL_ATTACK_TYPE=byzantine ACFL_ATTACK_CLIENTS=client_2 \
+  docker compose -f docker/docker-compose.acfl.yml up --build
+```
+
 ---
 
 ## Docker Files (in `docker/`)
@@ -49,7 +70,12 @@ This starts:
 - **`docker/Dockerfile.cae`** - Base image for CAE FL
 - **`docker/docker-compose.cae.yml`** - Compose file for CAE system
 
-Build context for both is the **project root** (`context: ..`). A **`.dockerignore`** at the project root keeps the context small (excludes `.git`, `__pycache__`, checkpoints, plots, `data/`, etc.). Dockerfiles use **CPU-only PyTorch** and **multi-stage builds** to reduce image size and disk use.
+### ACFL System
+- **`docker/Dockerfile.acfl`** - Base image for ACFL packet FL
+- **`docker/docker-compose.acfl.yml`** - Compose file for ACFL system
+- **`docker/entrypoint_acfl.sh`** - Server/client role switcher
+
+Build context for all is the **project root** (`context: ..`). A **`.dockerignore`** at the project root keeps the context small (excludes `.git`, `__pycache__`, checkpoints, plots, `data/`, etc.). Dockerfiles use **CPU-only PyTorch** and **multi-stage builds** to reduce image size and disk use.
 
 ---
 
@@ -176,13 +202,98 @@ docker-compose -f docker/docker-compose.yml down
 
 ---
 
+## ACFL System Details
+
+### Prerequisites
+
+Stock packet CSVs under the project root:
+
+```bash
+ls data/train/packets/packet_client_000.csv \
+   data/train/packets/packet_client_001.csv \
+   data/train/packets/packet_client_002.csv
+```
+
+For the paper SITL agent–mission layout, mount
+`data/sitl_dataset/fl/packets` and set `FL_DATA_DIR` / drop
+`FL_PACKET_FILE` so each client resolves files via `--data-dir`.
+
+### Environment Variables
+
+**Server:**
+
+| Variable | Default | Meaning |
+|----------|---------|---------|
+| `FL_ROLE` | `server` | |
+| `FL_SERVER_HOST` | `0.0.0.0` | Bind address |
+| `FL_SERVER_PORT` | `8090` | HTTP port |
+| `FL_NUM_CLIENTS` / `FL_MIN_CLIENTS` | `3` / `2` | Swarm size / quorum |
+| `FL_CONFIG_MODULE` | `config_classification_drone` | TinyPacketCNN profile |
+| `FL_LEARNING_MODE` | `classification` | |
+| `FL_MAX_ROUNDS` | `12` | Caps client local rounds |
+| `ACFL_MALICIOUS_CLIENTS` | `client_2` | Ground truth for trust metrics |
+| `ACFL_NO_LAYER1` / `2` / `3` | `0` | Set `1` to disable a layer |
+| `ACFL_PROBE_FILE` | _(empty)_ | Optional Layer‑1 probe `.pt` |
+
+**Clients:**
+
+| Variable | Default | Meaning |
+|----------|---------|---------|
+| `FL_ROLE` | `client` | |
+| `FL_CLIENT_ID` | `client_1`… | Must match attack list IDs |
+| `FL_SERVER_URL` | `http://acfl-server:8090` | |
+| `FL_DATA_DIR` | `/app/data/train/packets` | Mounted host `data/` |
+| `FL_PACKET_FILE` | per-client CSV | Explicit packet path |
+| `FL_CLIENT_STAGGER_SEC` | `5` | Delay × (client index − 1) |
+| `ACFL_ATTACK_CLIENTS` | _(empty)_ | e.g. `client_2` |
+| `ACFL_ATTACK_TYPE` | _(empty)_ | `byzantine`, `gradient_scaling`, `backdoor`, … |
+| `ACFL_ATTACK_SCALE` / `ACFL_ATTACK_NOISE` | `10` / `1` | Attack knobs |
+
+### Volumes
+
+- **Server:** `../fl-time-series/checkpoints` → `/app/checkpoints` (trust scores + round reports)
+- **Clients:** `../data` → `/app/data:ro`
+
+### Running
+
+From the **project root**:
+
+```bash
+# Benign ACFL
+docker compose -f docker/docker-compose.acfl.yml up --build
+
+# Detached + logs
+docker compose -f docker/docker-compose.acfl.yml up -d --build
+docker compose -f docker/docker-compose.acfl.yml logs -f
+
+# Poisoned (Byzantine client_2)
+ACFL_ATTACK_TYPE=byzantine ACFL_ATTACK_CLIENTS=client_2 \
+  docker compose -f docker/docker-compose.acfl.yml up --build
+
+# Layer-1 only
+ACFL_NO_LAYER2=1 ACFL_NO_LAYER3=1 \
+  docker compose -f docker/docker-compose.acfl.yml up --build
+
+# Stop
+docker compose -f docker/docker-compose.acfl.yml down
+```
+
+Build the image alone:
+
+```bash
+docker build -f docker/Dockerfile.acfl -t fl-acfl:latest .
+```
+
+---
+
 ## Troubleshooting
 
 ### Port Conflicts
 
 - **CAE system** uses port **5544** (default)
 - **Timeseries system** uses port **8080** (default)
-- Change ports in `docker/docker-compose.cae.yml` or `docker/docker-compose.yml` if needed
+- **ACFL system** uses port **8090** (default)
+- Change ports in the corresponding `docker/docker-compose*.yml` if needed
 
 ### Data Not Found
 
@@ -211,7 +322,7 @@ docker-compose -f docker/docker-compose.yml down
 
 ### Building Individual Images
 
-From the **project root** (build context must be project root so `COPY requirements-docker.txt`, `COPY fl-time-series/` or `COPY fl-payload/` work):
+From the **project root** (build context must be project root so `COPY requirements-docker.txt`, `COPY fl-time-series/` or `COPY fl-payload/` / `COPY acfl/` work):
 
 ```bash
 # CAE system
@@ -219,6 +330,9 @@ docker build -f docker/Dockerfile.cae -t fl-cae:latest .
 
 # Timeseries system
 docker build -f docker/Dockerfile -t fl-timeseries:latest .
+
+# ACFL system
+docker build -f docker/Dockerfile.acfl -t fl-acfl:latest .
 ```
 
 ### Running Individual Containers

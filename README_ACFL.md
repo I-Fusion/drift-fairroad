@@ -246,6 +246,23 @@ is the usual path; Mono/Linux builds work if tlog replay is available).
    - If only one vehicle appears, re-check that multi-vehicle display is on and
      sysids 11–13 are not filtered out.
 
+## Docker
+
+ACFL has a compose stack next to the existing timeseries / CAE images
+(see `docker/DOCKER.md`):
+
+```bash
+# From repo root — needs data/train/packets/packet_client_00{0,1,2}.csv
+docker compose -f docker/docker-compose.acfl.yml up --build
+
+# Optional Byzantine poisoning on client_2
+ACFL_ATTACK_TYPE=byzantine ACFL_ATTACK_CLIENTS=client_2 \
+  docker compose -f docker/docker-compose.acfl.yml up --build
+```
+
+Server listens on host port **8090**. Checkpoints and
+`acfl_trust_scores.json` land under `fl-time-series/checkpoints/`.
+
 ## Tests
 
 ```bash

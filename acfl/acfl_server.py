@@ -13,10 +13,20 @@ from typing import Dict, List, Optional
 import torch
 from aiohttp import web
 
-# Resolve drift-fairroad paths
+# Resolve drift-fairroad paths (flat repo / Docker, or nested ACFL/drift-fairroad)
 ACFL_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DRIFT_FAIRROAD_ROOT = os.path.join(ACFL_ROOT, "drift-fairroad")
-FL_TS_DIR = os.path.join(DRIFT_FAIRROAD_ROOT, "fl-time-series")
+_nested_fl = os.path.join(ACFL_ROOT, "drift-fairroad", "fl-time-series")
+_flat_fl = os.path.join(ACFL_ROOT, "fl-time-series")
+if os.path.isdir(_flat_fl):
+    DRIFT_FAIRROAD_ROOT = ACFL_ROOT
+    FL_TS_DIR = _flat_fl
+elif os.path.isdir(_nested_fl):
+    DRIFT_FAIRROAD_ROOT = os.path.join(ACFL_ROOT, "drift-fairroad")
+    FL_TS_DIR = _nested_fl
+else:
+    # Docker flat layout: fl-time-series modules live alongside acfl/ under /app
+    DRIFT_FAIRROAD_ROOT = ACFL_ROOT
+    FL_TS_DIR = ACFL_ROOT
 
 for path in [FL_TS_DIR, DRIFT_FAIRROAD_ROOT, ACFL_ROOT]:
     if path not in sys.path:

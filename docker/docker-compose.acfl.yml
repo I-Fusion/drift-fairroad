@@ -1,0 +1,138 @@
+# ACFL packet-classification FL (TinyPacketCNN / config_classification_drone).
+# From project root:
+#   docker compose -f docker/docker-compose.acfl.yml up --build
+#
+# Optional poisoning demo (Byzantine on client_2):
+#   ACFL_ATTACK_TYPE=byzantine ACFL_ATTACK_CLIENTS=client_2 \
+#     docker compose -f docker/docker-compose.acfl.yml up --build
+
+services:
+  acfl-server:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.acfl
+    container_name: acfl-server
+    environment:
+      - FL_ROLE=server
+      - FL_SERVER_HOST=0.0.0.0
+      - FL_SERVER_PORT=8090
+      - FL_NUM_CLIENTS=3
+      - FL_MIN_CLIENTS=2
+      - FL_CONFIG_MODULE=config_classification_drone
+      - FL_LEARNING_MODE=classification
+      - FL_MAX_ROUNDS=12
+      # Ground-truth labels for trust AUC (optional)
+      - ACFL_MALICIOUS_CLIENTS=${ACFL_MALICIOUS_CLIENTS:-client_2}
+      - ACFL_EVALUATION_ATTACK_TYPE=${ACFL_ATTACK_TYPE:-}
+      # Layer toggles: set to 1 to disable
+      - ACFL_NO_LAYER1=${ACFL_NO_LAYER1:-0}
+      - ACFL_NO_LAYER2=${ACFL_NO_LAYER2:-0}
+      - ACFL_NO_LAYER3=${ACFL_NO_LAYER3:-0}
+    ports:
+      - "8090:8090"
+    networks:
+      - acfl-network
+    volumes:
+      - ../fl-time-series/checkpoints:/app/checkpoints
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/status', timeout=3)",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+
+  acfl-client-1:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.acfl
+    container_name: acfl-client-1
+    environment:
+      - FL_ROLE=client
+      - FL_CLIENT_ID=client_1
+      - FL_SERVER_URL=http://acfl-server:8090
+      - FL_CONFIG_MODULE=config_classification_drone
+      - FL_LEARNING_MODE=classification
+      - FL_DATA_DIR=/app/data/train/packets
+      - FL_PACKET_FILE=/app/data/train/packets/packet_client_000.csv
+      - FL_USE_LABELS=1
+      - FL_CLIENT_STAGGER_SEC=5
+      - FL_MAX_ROUNDS=12
+      - ACFL_ATTACK_CLIENTS=${ACFL_ATTACK_CLIENTS:-}
+      - ACFL_ATTACK_TYPE=${ACFL_ATTACK_TYPE:-}
+      - ACFL_ATTACK_SCALE=${ACFL_ATTACK_SCALE:-10.0}
+      - ACFL_ATTACK_NOISE=${ACFL_ATTACK_NOISE:-1.0}
+    depends_on:
+      acfl-server:
+        condition: service_healthy
+    networks:
+      - acfl-network
+    volumes:
+      - ../data:/app/data:ro
+
+  acfl-client-2:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.acfl
+    container_name: acfl-client-2
+    environment:
+      - FL_ROLE=client
+      - FL_CLIENT_ID=client_2
+      - FL_SERVER_URL=http://acfl-server:8090
+      - FL_CONFIG_MODULE=config_classification_drone
+      - FL_LEARNING_MODE=classification
+      - FL_DATA_DIR=/app/data/train/packets
+      - FL_PACKET_FILE=/app/data/train/packets/packet_client_001.csv
+      - FL_USE_LABELS=1
+      - FL_CLIENT_STAGGER_SEC=5
+      - FL_MAX_ROUNDS=12
+      - ACFL_ATTACK_CLIENTS=${ACFL_ATTACK_CLIENTS:-}
+      - ACFL_ATTACK_TYPE=${ACFL_ATTACK_TYPE:-}
+      - ACFL_ATTACK_SCALE=${ACFL_ATTACK_SCALE:-10.0}
+      - ACFL_ATTACK_NOISE=${ACFL_ATTACK_NOISE:-1.0}
+      - ACFL_BACKDOOR_POISON_FRACTION=${ACFL_BACKDOOR_POISON_FRACTION:-0.35}
+      - ACFL_LABEL_FLIP_FRACTION=${ACFL_LABEL_FLIP_FRACTION:-0.5}
+    depends_on:
+      acfl-server:
+        condition: service_healthy
+    networks:
+      - acfl-network
+    volumes:
+      - ../data:/app/data:ro
+
+  acfl-client-3:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.acfl
+    container_name: acfl-client-3
+    environment:
+      - FL_ROLE=client
+      - FL_CLIENT_ID=client_3
+      - FL_SERVER_URL=http://acfl-server:8090
+      - FL_CONFIG_MODULE=config_classification_drone
+      - FL_LEARNING_MODE=classification
+      - FL_DATA_DIR=/app/data/train/packets
+      - FL_PACKET_FILE=/app/data/train/packets/packet_client_002.csv
+      - FL_USE_LABELS=1
+      - FL_CLIENT_STAGGER_SEC=5
+      - FL_MAX_ROUNDS=12
+      - ACFL_ATTACK_CLIENTS=${ACFL_ATTACK_CLIENTS:-}
+      - ACFL_ATTACK_TYPE=${ACFL_ATTACK_TYPE:-}
+      - ACFL_ATTACK_SCALE=${ACFL_ATTACK_SCALE:-10.0}
+      - ACFL_ATTACK_NOISE=${ACFL_ATTACK_NOISE:-1.0}
+    depends_on:
+      acfl-server:
+        condition: service_healthy
+    networks:
+      - acfl-network
+    volumes:
+      - ../data:/app/data:ro
+
+networks:
+  acfl-network:
+    driver: bridge

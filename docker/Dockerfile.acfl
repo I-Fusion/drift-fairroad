@@ -1,0 +1,56 @@
+# -----------------------------------------------------------------------------
+# Stage 1: install dependencies (CPU-only PyTorch to save image size)
+# -----------------------------------------------------------------------------
+FROM python:3.10-slim AS builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+
+# Prefer CPU wheels from the PyTorch index; keep PyPI for build deps (flit_core, etc.).
+RUN pip install --no-cache-dir torch torchvision \
+    --extra-index-url https://download.pytorch.org/whl/cpu
+
+COPY requirements-docker.txt .
+# ACFL runtime uses the same stack as timeseries FL (pytest is local-only).
+RUN pip install --no-cache-dir -r requirements-docker.txt
+
+# -----------------------------------------------------------------------------
+# Stage 2: runtime image
+# -----------------------------------------------------------------------------
+FROM python:3.10-slim
+
+WORKDIR /app
+
+COPY --from=builder /usr/local/lib/python3.10/site-packages /usr/local/lib/python3.10/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
+
+# Flatten fl-time-series modules (same layout as docker/Dockerfile) + ACFL package
+COPY fl-time-series/*.py ./
+COPY fl-time-series/models/ models/
+COPY acfl/ acfl/
+COPY docker/entrypoint_acfl.sh /usr/local/bin/entrypoint_acfl.sh
+
+RUN chmod +x /usr/local/bin/entrypoint_acfl.sh \
+    && mkdir -p checkpoints data/train/packets
+
+ENV FL_ROLE=client
+ENV FL_CLIENT_ID=client_1
+ENV FL_SERVER_URL=http://acfl-server:8090
+ENV FL_SERVER_HOST=0.0.0.0
+ENV FL_SERVER_PORT=8090
+ENV FL_NUM_CLIENTS=3
+ENV FL_MIN_CLIENTS=2
+ENV FL_CONFIG_MODULE=config_classification_drone
+ENV FL_LEARNING_MODE=classification
+ENV FL_DATA_DIR=/app/data/train/packets
+ENV FL_USE_LABELS=1
+ENV FL_CLIENT_STAGGER_SEC=5
+ENV FL_MAX_ROUNDS=12
+ENV PYTHONUNBUFFERED=1
+
+EXPOSE 8090
+
+ENTRYPOINT ["/usr/local/bin/entrypoint_acfl.sh"]
