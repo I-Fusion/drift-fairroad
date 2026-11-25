@@ -3,7 +3,7 @@
 Poisoning-resilient FL defense for the
 [I-Fusion/drift-fairroad](https://github.com/I-Fusion/drift-fairroad)
 evaluation testbed (IEEE AESS Challenge 3), plus the harness needed to
-**reproduce the manuscript main results**.
+**reproduce the main results**.
 
 This tree is meant to live at the **root of `drift-fairroad`** (alongside
 `fl-time-series/`, `data/`, and `docker/`).
@@ -64,10 +64,10 @@ python run_acfl_system.py \
     --num-clients 3 --min-clients 2 --max-fl-rounds 12
 ```
 
-## Reproduce manuscript main results
+## Reproduce main results
 
 Raw SITL flight data is **not** shipped. Generate it locally, then run the
-journal benchmark. Wall-clock for full SITL collection is hours; the FL
+benchmark. Wall-clock for full SITL collection is hours; the FL
 matrix (3 attacks × 5 defenders × 10 seeds × 12 rounds) is also long — start
 with a smoke subset if needed.
 
@@ -127,7 +127,7 @@ Attacks: gradient scaling (10×), Byzantine, backdoor (35% poison / 5×).
 Seeds: 42–51. Config: `config_classification_drone` (TinyPacketCNN), 3 clients / quorum 2, 12 rounds.
 
 ```bash
-# Full paper matrix (run from repo root)
+# Full matrix (run from repo root)
 python3 benchmarks/run_drone_journal_benchmark.py --seeds 42,43,44,45,46,47,48,49,50,51
 
 # Smoke (3 seeds)
@@ -141,43 +141,18 @@ Outputs:
 - `evaluation_results/acfl_tuning/drone_journal_benchmark_summary.json`
 - Per-scenario checkpoints under `evaluation_results/comprehensive_validation/journal_*`
 
-### 5. Sync manuscript tables / figures (optional)
-
-```bash
-python3 scripts/sync_manuscript_numbers.py
-python3 scripts/compute_significance_tests.py
-python3 docs/manuscript/generate_figures.py
-
-cd docs/manuscript
-pdflatex main && bibtex main && pdflatex main && pdflatex main
-```
-
-### Related manuscript suites
-
-| Script | Paper section |
-|--------|----------------|
-| `benchmarks/run_drone_ablation.py` | Layer ablations |
-| `benchmarks/run_drone_threat_gaps.py` | Label flip / model replacement |
-| `benchmarks/run_drone_attack_intensity_sweep.py` | Attack intensity |
-| `benchmarks/run_drone_probe_config_ablation.py` | Probe-config ablation |
-| `benchmarks/run_drone_5client_*_benchmark.py` | 5-client swarm |
-| `benchmarks/run_drone_combined_layer3_benchmark.py` / `benchmarks/run_drone_full_stack_benchmark.py` | Joint Layer‑1/2/3 |
-
 ## Mission Planner demos (FedAvg vs ACFL)
 
 Fly separate controller logs per scene so Mission Planner can show **EKF
 (sysid 1/2/3)** vs **SIM truth (sysid 11/12/13)**. Generated packs land under
 `results/demo_mission_planner/` (gitignored — regenerate locally).
 
-**Not included:** dual-pane / storyboard MP4 renderers, VO/soundtrack scripts,
-or pre-baked demo packs.
-
 ### Prerequisites
 
 ```bash
 bash simulations/setup_sitl.sh
 export ARDUPILOT_DIR=$HOME/ardupilot
-# Detectors: prefers journal checkpoints if you have run the FL matrix;
+# Detectors: prefers checkpoints if you have run the FL matrix;
 # otherwise falls back to fl-time-series/checkpoints/acfl_examples/*.pt
 ```
 
@@ -283,15 +258,3 @@ Under `fl-time-series/checkpoints/`:
 
 - `acfl_trust_scores.json` — per-round client trust
 - `acfl_round_reports.json` — validation / aggregation diagnostics
-
-## Scope
-
-**Included:** ACFL package, patched FL client/server (agent–mission loading,
-oversampling, attack hooks, robust aggregators), TinyPacketCNN, journal and
-ablation harnesses, SITL **collection** scripts, Mission Planner **fly/pack**
-scripts, manuscript sources, unit tests.
-
-**Not included:** large generated SITL run trees (`data/sitl_*`),
-`evaluation_results/` caches, `results/demo_mission_planner/` packs, dual-pane
-film / soundtrack tooling, and local virtualenvs. Regenerate runnable artifacts
-with the steps above.
