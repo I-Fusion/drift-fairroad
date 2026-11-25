@@ -9,10 +9,10 @@ Variants:
   * acfl_pta_hard / soft / conservative — dual-path arbitration (extras on)
 
 Usage:
-  ./acfl_env/bin/python run_drone_clean_l1l2_ablation.py \\
+  ./acfl_env/bin/python benchmarks/run_drone_clean_l1l2_ablation.py \\
     --skip-setup --seeds 42,43,44 --port 9300
 
-  ./acfl_env/bin/python run_drone_clean_l1l2_ablation.py \\
+  ./acfl_env/bin/python benchmarks/run_drone_clean_l1l2_ablation.py \\
     --skip-setup --merge-existing --variants acfl_l1_only_clean \\
     --seeds 42,43,44,45,46,47,48,49,50,51 --port 9500
 """

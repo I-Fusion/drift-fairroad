@@ -12,10 +12,10 @@ Outputs live under ``evaluation_results/combined_layer3/`` so existing
 
 Usage:
     # Full matrix (slow — runs FL + Layer 3 per cell):
-    ./acfl_env/bin/python run_drone_combined_layer3_benchmark.py
+    ./acfl_env/bin/python benchmarks/run_drone_combined_layer3_benchmark.py
 
     # Reuse journal FL checkpoints, run Layer 3 only (fast):
-    ./acfl_env/bin/python run_drone_combined_layer3_benchmark.py \\
+    ./acfl_env/bin/python benchmarks/run_drone_combined_layer3_benchmark.py \\
         --layer3-only \\
         --checkpoint-root evaluation_results/comprehensive_validation
 """

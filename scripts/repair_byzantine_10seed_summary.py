@@ -10,6 +10,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+
+import sys
+from pathlib import Path as _Path
+_ROOT = _Path(__file__).resolve().parents[1]
+_BENCH = _ROOT / "benchmarks"
+for _p in (_ROOT, _BENCH):
+    if str(_p) not in sys.path:
+        sys.path.insert(0, str(_p))
+
 from run_comprehensive_validation import OUT_ROOT, _fl_eval_summary
 
 TUNING = ROOT / "evaluation_results" / "acfl_tuning"

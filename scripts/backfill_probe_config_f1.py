@@ -10,6 +10,15 @@ import json
 import os
 from pathlib import Path
 
+
+import sys
+from pathlib import Path as _Path
+_ROOT = _Path(__file__).resolve().parents[1]
+_BENCH = _ROOT / "benchmarks"
+for _p in (_ROOT, _BENCH):
+    if str(_p) not in sys.path:
+        sys.path.insert(0, str(_p))
+
 from run_comprehensive_validation import OUT_ROOT, SITL_PKT, evaluate_scenario
 from run_drone_probe_config_ablation import (
     ATTACKS,

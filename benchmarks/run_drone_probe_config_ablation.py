@@ -10,11 +10,11 @@ Arms:
 
 Usage:
   # Smoke (3 seeds × 3 attacks × 2 arms)
-  ./acfl_env/bin/python run_drone_probe_config_ablation.py \\
+  ./acfl_env/bin/python benchmarks/run_drone_probe_config_ablation.py \\
     --skip-setup --attacks byzantine,backdoor,label_flip --seeds 42,43,44
 
   # Full 10-seed resume
-  ./acfl_env/bin/python run_drone_probe_config_ablation.py \\
+  ./acfl_env/bin/python benchmarks/run_drone_probe_config_ablation.py \\
     --skip-setup --merge-existing --seeds 42,43,44,45,46,47,48,49,50,51
 """
 from __future__ import annotations

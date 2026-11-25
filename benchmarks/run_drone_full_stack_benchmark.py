@@ -12,10 +12,10 @@ Outputs live under ``evaluation_results/full_stack/`` (isolated from other studi
 
 Usage:
     # Fast: reuse ablation/journal checkpoints, eval Layer 1/2/3 metrics only
-    ./acfl_env/bin/python run_drone_full_stack_benchmark.py --eval-only --merge-existing
+    ./acfl_env/bin/python benchmarks/run_drone_full_stack_benchmark.py --eval-only --merge-existing
 
     # Full: train + evaluate per cell (hours)
-    ./acfl_env/bin/python run_drone_full_stack_benchmark.py --merge-existing
+    ./acfl_env/bin/python benchmarks/run_drone_full_stack_benchmark.py --merge-existing
 """
 from __future__ import annotations
 

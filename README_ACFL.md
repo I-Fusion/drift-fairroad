@@ -14,9 +14,7 @@ This tree is meant to live at the **root of `drift-fairroad`** (alongside
 |------|------|
 | `acfl/` | Defense package (Layers 1–3) + robust baselines |
 | `run_acfl_system.py` | End-to-end FL runner (`acfl.acfl_server`) |
-| `run_drone_journal_benchmark.py` | Main paper matrix (FedAvg / median / trimmed / Krum / ACFL × attacks × seeds) |
-| `run_comprehensive_validation.py` | Scenario runner used by journal + ablation harnesses |
-| `run_drone_*.py` | Ablations, threat gaps, 5-client, Layer‑3 / full-stack suites |
+| `benchmarks/` | Journal / ablation / Layer‑3 harnesses (`run_drone_*.py`, `run_comprehensive_validation.py`) |
 | `evaluate_acfl.py` / `evaluate_layer3_sitl.py` | Trust-score and Layer‑3 AUROC helpers |
 | `fl-time-series/models/tiny_packet_cnn.py` | Drone-scale TinyPacketCNN (~14k params) |
 | `fl-time-series/config_classification_drone.py` | Packet FL profile that selects TinyPacketCNN |
@@ -129,11 +127,11 @@ Attacks: gradient scaling (10×), Byzantine, backdoor (35% poison / 5×).
 Seeds: 42–51. Config: `config_classification_drone` (TinyPacketCNN), 3 clients / quorum 2, 12 rounds.
 
 ```bash
-# Full paper matrix
-python3 run_drone_journal_benchmark.py --seeds 42,43,44,45,46,47,48,49,50,51
+# Full paper matrix (run from repo root)
+python3 benchmarks/run_drone_journal_benchmark.py --seeds 42,43,44,45,46,47,48,49,50,51
 
 # Smoke (3 seeds)
-python3 run_drone_journal_benchmark.py --seeds 42,43,44
+python3 benchmarks/run_drone_journal_benchmark.py --seeds 42,43,44
 ```
 
 Outputs:
@@ -158,12 +156,12 @@ pdflatex main && bibtex main && pdflatex main && pdflatex main
 
 | Script | Paper section |
 |--------|----------------|
-| `run_drone_ablation.py` | Layer ablations |
-| `run_drone_threat_gaps.py` | Label flip / model replacement |
-| `run_drone_attack_intensity_sweep.py` | Attack intensity |
-| `run_drone_probe_config_ablation.py` | Probe-config ablation |
-| `run_drone_5client_*_benchmark.py` | 5-client swarm |
-| `run_drone_combined_layer3_benchmark.py` / `run_drone_full_stack_benchmark.py` | Joint Layer‑1/2/3 |
+| `benchmarks/run_drone_ablation.py` | Layer ablations |
+| `benchmarks/run_drone_threat_gaps.py` | Label flip / model replacement |
+| `benchmarks/run_drone_attack_intensity_sweep.py` | Attack intensity |
+| `benchmarks/run_drone_probe_config_ablation.py` | Probe-config ablation |
+| `benchmarks/run_drone_5client_*_benchmark.py` | 5-client swarm |
+| `benchmarks/run_drone_combined_layer3_benchmark.py` / `benchmarks/run_drone_full_stack_benchmark.py` | Joint Layer‑1/2/3 |
 
 ## Mission Planner demos (FedAvg vs ACFL)
 

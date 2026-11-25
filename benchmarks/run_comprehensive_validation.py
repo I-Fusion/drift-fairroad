@@ -10,8 +10,8 @@ Runs sequentially (memory-safe on limited hardware):
   5. Aggregated JSON report
 
 Usage:
-    ./acfl_env/bin/python run_comprehensive_validation.py
-    ./acfl_env/bin/python run_comprehensive_validation.py --quick   # fewer scenarios
+    ./acfl_env/bin/python benchmarks/run_comprehensive_validation.py
+    ./acfl_env/bin/python benchmarks/run_comprehensive_validation.py --quick   # fewer scenarios
 """
 import argparse
 import glob
@@ -27,16 +27,32 @@ from typing import Dict, List, Optional
 
 import requests
 
+# Allow `from run_comprehensive_validation import ...` across this package
+_BENCH_DIR = os.path.dirname(os.path.abspath(__file__))
+if _BENCH_DIR not in sys.path:
+    sys.path.insert(0, _BENCH_DIR)
+
 
 def _resolve_repo_roots(here: str):
-    """Support flat drift-fairroad root (PR) and nested ACFL/drift-fairroad."""
-    root = os.path.dirname(os.path.abspath(here))
-    if os.path.isdir(os.path.join(root, "fl-time-series")):
-        return root, root
-    nested = os.path.join(root, "drift-fairroad")
-    if os.path.isdir(nested):
-        return root, nested
-    return root, root
+    """Locate repo root from this file (root or benchmarks/)."""
+    start = os.path.dirname(os.path.abspath(here))
+    root = start
+    for _ in range(5):
+        if os.path.isdir(os.path.join(root, "fl-time-series")):
+            return root, root
+        nested = os.path.join(root, "drift-fairroad")
+        if os.path.isdir(os.path.join(nested, "fl-time-series")):
+            return root, nested
+        parent = os.path.dirname(root)
+        if parent == root:
+            break
+        root = parent
+    # Fallback: parent of benchmarks/ if present
+    if os.path.basename(start) == "benchmarks":
+        root = os.path.dirname(start)
+        if os.path.isdir(os.path.join(root, "fl-time-series")):
+            return root, root
+    return start, start
 
 
 def _resolve_python(repo_root: str) -> str:

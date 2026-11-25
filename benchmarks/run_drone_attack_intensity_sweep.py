@@ -10,11 +10,11 @@ ACFL-full, and optional Layer~1-only / Layer~2-only ACFL arms.
 
 Usage:
   # Smoke (3 seeds)
-  ./acfl_env/bin/python run_drone_attack_intensity_sweep.py \\
+  ./acfl_env/bin/python benchmarks/run_drone_attack_intensity_sweep.py \\
     --skip-setup --seeds 42,43,44 --port 8000
 
   # Full 5-seed resume
-  ./acfl_env/bin/python run_drone_attack_intensity_sweep.py \\
+  ./acfl_env/bin/python benchmarks/run_drone_attack_intensity_sweep.py \\
     --skip-setup --merge-existing --seeds 42,43,44,45,46
 """
 from __future__ import annotations

@@ -9,11 +9,11 @@ counterfactual weight to 0 also skips probe forwards.
 
 Usage:
   # Smoke
-  ./acfl_env/bin/python run_drone_layer1_component_ablation.py \\
+  ./acfl_env/bin/python benchmarks/run_drone_layer1_component_ablation.py \\
     --skip-setup --seeds 42,43,44 --port 9100
 
   # Resume / expand
-  ./acfl_env/bin/python run_drone_layer1_component_ablation.py \\
+  ./acfl_env/bin/python benchmarks/run_drone_layer1_component_ablation.py \\
     --skip-setup --merge-existing --seeds 42,43,44,45,46
 """
 from __future__ import annotations

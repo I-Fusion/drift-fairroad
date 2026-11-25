@@ -5,7 +5,7 @@ Locked 10-seed PTA conservative used tau=0.05, λ_skip=0, λ_S=0.1, λ_R=1.0.
 This grid keeps extras on and only changes the selector.
 
 Usage:
-  ./acfl_env/bin/python run_drone_pta_tune.py --skip-setup --port 9700
+  ./acfl_env/bin/python benchmarks/run_drone_pta_tune.py --skip-setup --port 9700
 """
 from __future__ import annotations
 

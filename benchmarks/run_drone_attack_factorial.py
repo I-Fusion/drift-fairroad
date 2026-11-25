@@ -9,7 +9,7 @@ Reuses completed n=3 cells from drone_attack_intensity_sweep.json when present.
 Runs only missing cells (typically the n=5 arms).
 
 Usage:
-  ./acfl_env/bin/python run_drone_attack_factorial.py --skip-setup --merge-existing \\
+  ./acfl_env/bin/python benchmarks/run_drone_attack_factorial.py --skip-setup --merge-existing \\
     --seeds 42,43,44,45,46 --port 8600
 """
 from __future__ import annotations

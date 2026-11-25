@@ -15,6 +15,15 @@ from pathlib import Path
 ACFL_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ACFL_ROOT))
 
+
+import sys
+from pathlib import Path as _Path
+_ROOT = _Path(__file__).resolve().parents[1]
+_BENCH = _ROOT / "benchmarks"
+for _p in (_ROOT, _BENCH):
+    if str(_p) not in sys.path:
+        sys.path.insert(0, str(_p))
+
 from run_drone_combined_layer3_benchmark import (  # noqa: E402
     DEFENDERS,
     LEARNING_ATTACKS,
