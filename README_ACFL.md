@@ -87,7 +87,7 @@ Unpack under the repo so paths look like:
 | `data/sitl_drone_extra/` | Supplemental drone missions (if present) |
 
 Checkpoints and `evaluation_results/` are **not** on Drive — regenerate them
-with the journal / ablation harnesses below.
+with the main results / ablation harnesses below.
 
 **Option B — generate** with the collection scripts below (needs ArduPilot SITL;
 wall-clock is hours).
