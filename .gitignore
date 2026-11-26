@@ -17,12 +17,3 @@ __pycache__/
 *.egg-info/
 .pytest_cache/
 .mypy_cache/
-
-# LaTeX build junk under manuscript
-docs/manuscript/*.aux
-docs/manuscript/*.bbl
-docs/manuscript/*.blg
-docs/manuscript/*.log
-docs/manuscript/*.out
-docs/manuscript/*.toc
-docs/manuscript/*.synctex.gz

@@ -26,7 +26,7 @@ This tree is meant to live at the **root of `drift-fairroad`** (alongside
 | `scripts/merge_mp_multivehicle_tlog.py` | Merge multi-vehicle tlogs (+ EKF/SIM dual sysids, NVF metrics) |
 | `scripts/pack_acfl_mp_demo.py` | Pack MP-ready tlogs / captions under `results/demo_mission_planner/` |
 | `scripts/extract_acfl_mp_tracks.py` | Extract EKF vs SIM tracks from packed runs |
-| `scripts/sync_manuscript_numbers.py` | Regenerate LaTeX tables from JSON summaries |
+| `scripts/sync_manuscript_numbers.py` | Optional helper to emit LaTeX table fragments from JSON |
 | `tests/` | Unit tests for the ACFL package |
 | `requirements-acfl.txt` | Extra Python deps beyond `requirements.txt` |
 
@@ -120,11 +120,10 @@ python3 build_agent_mission_dataset.py \
 Expected layout: `data/sitl_dataset/fl/packets/agent_XXX/mission_*.csv`
 (~98k labeled packets across 10 agents × 2 missions).
 
-Optional dataset stats:
+Optional dataset stats (JSON; optional `--latex-out` path of your choice):
 
 ```bash
-python3 scripts/compute_dataset_statistics.py \
-  --latex-out docs/manuscript/dataset_stats.tex
+python3 scripts/compute_dataset_statistics.py
 ```
 
 ### 3. Layer‑1 probe set
