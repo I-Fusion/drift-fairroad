@@ -14,7 +14,7 @@ This tree is meant to live at the **root of `drift-fairroad`** (alongside
 |------|------|
 | `acfl/` | Defense package (Layers 1–3) + robust baselines |
 | `run_acfl_system.py` | End-to-end FL runner (`acfl.acfl_server`) |
-| `benchmarks/` | Journal / ablation / Layer‑3 harnesses (`run_drone_*.py`, `run_comprehensive_validation.py`) |
+| `benchmarks/` | Main results / ablation / Layer‑3 harnesses (`run_drone_*.py`, `run_comprehensive_validation.py`) |
 | `evaluate_acfl.py` / `evaluate_layer3_sitl.py` | Trust-score and Layer‑3 AUROC helpers |
 | `fl-time-series/models/tiny_packet_cnn.py` | Drone-scale TinyPacketCNN (~14k params) |
 | `fl-time-series/config_classification_drone.py` | Packet FL profile that selects TinyPacketCNN |
@@ -27,7 +27,6 @@ This tree is meant to live at the **root of `drift-fairroad`** (alongside
 | `scripts/pack_acfl_mp_demo.py` | Pack MP-ready tlogs / captions under `results/demo_mission_planner/` |
 | `scripts/extract_acfl_mp_tracks.py` | Extract EKF vs SIM tracks from packed runs |
 | `scripts/sync_manuscript_numbers.py` | Regenerate LaTeX tables from JSON summaries |
-| `docs/manuscript/` | Journal manuscript sources |
 | `tests/` | Unit tests for the ACFL package |
 | `requirements-acfl.txt` | Extra Python deps beyond `requirements.txt` |
 
@@ -84,7 +83,7 @@ Place the contents so the repo sees:
 | `data/sitl_dataset/` | Primary SITL runs + `fl/packets/` agent–mission layout |
 | `data/sitl_validate/` | Validate batch runs (if included in the pack) |
 | `data/sitl_drone_extra/` | Supplemental drone missions (if included) |
-| `evaluation_results/` | Journal / ablation checkpoints and JSON summaries (if included) |
+| `evaluation_results/` | Main results / ablation checkpoints and JSON summaries (if included) |
 | `fl-time-series/checkpoints/` | Probe sets / working FL checkpoints (if included) |
 
 **Option B — generate** with the collection scripts below (needs ArduPilot SITL;
@@ -130,7 +129,7 @@ python3 scripts/compute_dataset_statistics.py \
 
 ### 3. Layer‑1 probe set
 
-The journal harness builds probes automatically when missing. To build them
+The harness builds probes automatically when missing. To build them
 yourself (pick any labeled mission CSV under the agent layout):
 
 ```bash
