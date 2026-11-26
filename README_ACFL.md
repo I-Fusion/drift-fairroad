@@ -66,12 +66,31 @@ python run_acfl_system.py \
 
 ## Reproduce main results
 
-Raw SITL flight data is **not** shipped. Generate it locally, then run the
-benchmark. Wall-clock for full SITL collection is hours; the FL
-matrix (3 attacks × 5 defenders × 10 seeds × 12 rounds) is also long — start
-with a smoke subset if needed.
+Raw SITL flight data and experiment checkpoints are **not** shipped in git
+(large artifacts). Obtain them either by download or by regenerating locally,
+then run the benchmark. The FL matrix (3 attacks × 5 defenders × 10 seeds ×
+12 rounds) is long — start with a smoke subset if needed.
 
-### 1. One-time ArduPilot SITL setup
+### Dataset and checkpoints
+
+**Option A — download** (recommended for reproducing published numbers):
+
+[Google Drive folder](https://drive.google.com/drive/folders/1hMjufuT59FY8nTBZa711rrNGvbukMK4S?usp=sharing)
+
+Place the contents so the repo sees:
+
+| Path | Contents |
+|------|----------|
+| `data/sitl_dataset/` | Primary SITL runs + `fl/packets/` agent–mission layout |
+| `data/sitl_validate/` | Validate batch runs (if included in the pack) |
+| `data/sitl_drone_extra/` | Supplemental drone missions (if included) |
+| `evaluation_results/` | Journal / ablation checkpoints and JSON summaries (if included) |
+| `fl-time-series/checkpoints/` | Probe sets / working FL checkpoints (if included) |
+
+**Option B — generate** with the collection scripts below (needs ArduPilot SITL;
+wall-clock is hours).
+
+### 1. One-time ArduPilot SITL setup (Option B only)
 
 ```bash
 bash simulations/setup_sitl.sh
@@ -80,7 +99,7 @@ export ARDUPILOT_DIR=$HOME/ardupilot
 
 See `simulations/SIMULATION_HARNESS.md` for ports, labeling, and debugging.
 
-### 2. Collect the 20-mission paper dataset (scripts only — no raw data in git)
+### 2. Collect the 20-mission paper dataset (Option B)
 
 Matches the recorded primary recipe (seed **11**, **10** drones, winds
 `{0,6,10}`, attacks `waypoint` / `gps` / `none`, 15× speedup, 300 m radius),
