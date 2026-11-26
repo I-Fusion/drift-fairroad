@@ -7,7 +7,7 @@ collection manifests. Writes JSON + optional LaTeX fragments.
 
 Usage:
     ./acfl_env/bin/python scripts/compute_dataset_statistics.py
-    ./acfl_env/bin/python scripts/compute_dataset_statistics.py --latex-out docs/manuscript/dataset_stats.tex
+    ./acfl_env/bin/python scripts/compute_dataset_statistics.py --latex-out dataset_stats.tex
 """
 from __future__ import annotations
 
