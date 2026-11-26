@@ -1,5 +1,5 @@
 #!/bin/sh
-# ACFL Docker entrypoint — mirrors docker/Dockerfile role switching.
+# ACFL Docker entrypoint - mirrors docker/Dockerfile role switching.
 # Env vars are documented in docker/DOCKER.md (ACFL section).
 set -e
 

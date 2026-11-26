@@ -33,7 +33,10 @@ COPY fl-time-series/models/ models/
 COPY acfl/ acfl/
 COPY docker/entrypoint_acfl.sh /usr/local/bin/entrypoint_acfl.sh
 
-RUN chmod +x /usr/local/bin/entrypoint_acfl.sh \
+# Strip CRLF (Windows checkouts) — otherwise exec fails with
+# "no such file or directory" even when the script is present.
+RUN sed -i 's/\r$//' /usr/local/bin/entrypoint_acfl.sh \
+    && chmod +x /usr/local/bin/entrypoint_acfl.sh \
     && mkdir -p checkpoints data/train/packets
 
 ENV FL_ROLE=client
@@ -53,4 +56,5 @@ ENV PYTHONUNBUFFERED=1
 
 EXPOSE 8090
 
-ENTRYPOINT ["/usr/local/bin/entrypoint_acfl.sh"]
+# Invoke via /bin/sh so a bad shebang/CRLF cannot break container start.
+ENTRYPOINT ["/bin/sh", "/usr/local/bin/entrypoint_acfl.sh"]
