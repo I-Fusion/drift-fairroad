@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Collect additional SITL missions; they are ingested into agents (not held-out agents).
-# After collection, run: python3 build_agent_mission_dataset.py --extra-runs .../sitl_validate/runs
+# After collection, run: python3 scripts/build_agent_mission_dataset.py --extra-runs .../sitl_validate/runs
 #
 # Usage (from drift-fairroad repo root):
-#   bash collect_validate_missions.sh
-#   bash collect_validate_missions.sh --no-sim   # re-postprocess existing runs only
+#   bash scripts/collect_validate_missions.sh
+#   bash scripts/collect_validate_missions.sh --no-sim   # re-postprocess existing runs only
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 if [[ -x "${REPO_ROOT}/acfl_env/bin/python" ]]; then
   PYTHON="${REPO_ROOT}/acfl_env/bin/python"
 elif [[ -x "${REPO_ROOT}/fl_env/bin/python" ]]; then
@@ -65,5 +65,5 @@ echo ">>> Collecting ${NUM_DRONES} validate drones (instance ${START_INSTANCE}+)
 echo ""
 echo "Validate dataset ready:"
 echo "  runs:  ${DATA_ROOT}/runs/drone_${START_INSTANCE}.."
-echo "  Ingest into agents: python3 build_agent_mission_dataset.py --extra-runs ${DATA_ROOT}/runs"
+echo "  Ingest into agents: python3 scripts/build_agent_mission_dataset.py --extra-runs ${DATA_ROOT}/runs"
 echo "  manifest: ${DATA_ROOT}/validate_manifest.json"

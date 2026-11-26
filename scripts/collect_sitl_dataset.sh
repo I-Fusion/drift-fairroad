@@ -10,11 +10,11 @@
 #   export ARDUPILOT_DIR=$HOME/ardupilot
 #
 # Usage (from drift-fairroad repo root):
-#   bash collect_sitl_dataset.sh
-#   bash collect_sitl_dataset.sh --no-sim   # re-postprocess existing runs only
+#   bash scripts/collect_sitl_dataset.sh
+#   bash scripts/collect_sitl_dataset.sh --no-sim   # re-postprocess existing runs only
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 if [[ -x "${REPO_ROOT}/acfl_env/bin/python" ]]; then
   PYTHON="${REPO_ROOT}/acfl_env/bin/python"
 elif [[ -x "${REPO_ROOT}/fl_env/bin/python" ]]; then
@@ -74,9 +74,9 @@ echo ">>> Collecting ${NUM_DRONES} primary SITL drones (instance ${START_INSTANC
 
 echo
 echo ">>> Primary collection done. Next steps:"
-echo "  1) bash collect_validate_missions.sh    # +4 missions"
-echo "  2) bash collect_drone_missions.sh       # +6 missions"
-echo "  3) python3 build_agent_mission_dataset.py \\"
+echo "  1) bash scripts/collect_validate_missions.sh    # +4 missions"
+echo "  2) bash scripts/collect_drone_missions.sh       # +6 missions"
+echo "  3) python3 scripts/build_agent_mission_dataset.py \\"
 echo "       --train-runs data/sitl_dataset/runs \\"
 echo "       --extra-runs data/sitl_validate/runs \\"
 echo "       --extra-runs data/sitl_drone_extra/runs \\"

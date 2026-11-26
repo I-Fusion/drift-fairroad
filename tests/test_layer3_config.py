@@ -5,8 +5,10 @@ import sys
 import pytest
 
 ACFL_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if ACFL_ROOT not in sys.path:
-    sys.path.insert(0, ACFL_ROOT)
+_SCRIPTS = os.path.join(ACFL_ROOT, "scripts")
+for _p in (_SCRIPTS, ACFL_ROOT):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 
 from evaluate_layer3_sitl import infer_config_module, tune_threshold_for_f1
 

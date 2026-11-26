@@ -297,7 +297,7 @@ def _run_layer3_eval(checkpoint: str, output_json: Path, force: bool = False) ->
 
     cmd = [
         str(PYTHON),
-        str(ACFL_ROOT / "evaluate_layer3_sitl.py"),
+        str(ACFL_ROOT / "scripts" / "evaluate_layer3_sitl.py"),
         "--data-dir", SITL_PKT,
         "--config", "config_classification_drone",
         "--checkpoint", checkpoint,

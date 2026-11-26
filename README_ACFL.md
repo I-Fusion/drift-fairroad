@@ -14,21 +14,23 @@ This tree is meant to live at the **root of `drift-fairroad`** (alongside
 |------|------|
 | `acfl/` | Defense package (Layers 1–3) + robust baselines |
 | `run_acfl_system.py` | End-to-end FL runner (`acfl.acfl_server`) |
-| `benchmarks/` | Main results / ablation / Layer‑3 harnesses (`run_drone_*.py`, `run_comprehensive_validation.py`) |
-| `evaluate_acfl.py` / `evaluate_layer3_sitl.py` | Trust-score and Layer‑3 AUROC helpers |
+| `benchmarks/` | Main results / ablation / Layer‑3 harnesses |
+| `scripts/` | Dataset collection, eval helpers, MP demos, table sync |
 | `fl-time-series/models/tiny_packet_cnn.py` | Drone-scale TinyPacketCNN (~14k params) |
 | `fl-time-series/config_classification_drone.py` | Packet FL profile that selects TinyPacketCNN |
 | `fl-time-series/checkpoints/acfl_examples/` | Example ACFL / FedAvg `.pt` checkpoints |
-| `collect_sitl_dataset.sh` | Primary 10-mission SITL collection (paper recipe) |
-| `collect_validate_missions.sh` / `collect_drone_missions.sh` | +4 / +6 supplemental missions |
-| `build_agent_mission_dataset.py` | Agent–mission FL packet layout |
-| `scripts/run_acfl_mp_sitl_demo.py` | Fly FedAvg vs ACFL 3-UAV Mission Planner scenes |
-| `scripts/merge_mp_multivehicle_tlog.py` | Merge multi-vehicle tlogs (+ EKF/SIM dual sysids, NVF metrics) |
-| `scripts/pack_acfl_mp_demo.py` | Pack MP-ready tlogs / captions under `results/demo_mission_planner/` |
-| `scripts/extract_acfl_mp_tracks.py` | Extract EKF vs SIM tracks from packed runs |
-| `scripts/sync_manuscript_numbers.py` | Optional helper to emit LaTeX table fragments from JSON |
 | `tests/` | Unit tests for the ACFL package |
 | `requirements-acfl.txt` | Extra Python deps beyond `requirements.txt` |
+
+Useful scripts (under `scripts/`):
+
+| Script | Role |
+|--------|------|
+| `collect_sitl_dataset.sh` / `collect_validate_missions.sh` / `collect_drone_missions.sh` | SITL collection |
+| `build_agent_mission_dataset.py` | Agent–mission FL packet layout |
+| `generate_probe_set.py` | Layer‑1 counterfactual probes |
+| `evaluate_acfl.py` / `evaluate_layer3_sitl.py` | Trust-score / Layer‑3 helpers |
+| `run_acfl_mp_sitl_demo.py` / `pack_acfl_mp_demo.py` | Mission Planner fly / pack |
 
 ### Defense layers
 
@@ -106,11 +108,11 @@ Matches the recorded primary recipe (seed **11**, **10** drones, winds
 then adds validate (+4) and drone-extra (+6) missions:
 
 ```bash
-bash collect_sitl_dataset.sh          # → data/sitl_dataset/
-bash collect_validate_missions.sh     # → data/sitl_validate/
-bash collect_drone_missions.sh        # → data/sitl_drone_extra/
+bash scripts/collect_sitl_dataset.sh          # → data/sitl_dataset/
+bash scripts/collect_validate_missions.sh     # → data/sitl_validate/
+bash scripts/collect_drone_missions.sh        # → data/sitl_drone_extra/
 
-python3 build_agent_mission_dataset.py \
+python3 scripts/build_agent_mission_dataset.py \
   --train-runs data/sitl_dataset/runs \
   --extra-runs data/sitl_validate/runs \
   --extra-runs data/sitl_drone_extra/runs \
@@ -133,7 +135,7 @@ The harness builds probes automatically when missing. To build them
 yourself (pick any labeled mission CSV under the agent layout):
 
 ```bash
-python3 generate_probe_set.py --mode classification \
+python3 scripts/generate_probe_set.py --mode classification \
   --packet-file data/sitl_dataset/fl/packets/agent_000/mission_drone_000.csv \
   --output fl-time-series/checkpoints/acfl_probes_sitl.pt
 ```

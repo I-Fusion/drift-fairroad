@@ -196,7 +196,7 @@ def _run_layer3_eval(
     output_json.parent.mkdir(parents=True, exist_ok=True)
     cmd = [
         str(PYTHON),
-        str(ACFL_ROOT / "evaluate_layer3_sitl.py"),
+        str(ACFL_ROOT / "scripts" / "evaluate_layer3_sitl.py"),
         "--data-dir",
         SITL_PKT,
         "--config",

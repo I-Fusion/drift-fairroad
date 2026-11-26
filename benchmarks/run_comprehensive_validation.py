@@ -162,7 +162,7 @@ def sync_agent_missions() -> Dict:
         if os.path.isdir(p):
             extra.append(p)
     cmd = [
-        PYTHON, os.path.join(ACFL_ROOT, "build_agent_mission_dataset.py"),
+        PYTHON, os.path.join(ACFL_ROOT, "scripts", "build_agent_mission_dataset.py"),
         "--train-runs", os.path.join(DRIFT_ROOT, "data", "sitl_dataset", "runs"),
         "--output", SITL_PKT,
         "--num-agents", "10",
@@ -261,7 +261,7 @@ def generate_probes() -> Dict:
     if not os.path.isfile(pkt):
         return {"ok": False, "error": f"missing {pkt}"}
     rc = _run([
-        PYTHON, "generate_probe_set.py", "--mode", "classification",
+        PYTHON, os.path.join(ACFL_ROOT, "scripts", "generate_probe_set.py"), "--mode", "classification",
         "--packet-file", pkt, "--output", out,
     ], timeout=120)
     return {"ok": rc == 0, "probe_file": out if rc == 0 else None}
@@ -657,7 +657,7 @@ def evaluate_scenario(
     metrics = {}
     malicious = set(c.strip() for c in sc.malicious_clients.split(",") if c.strip())
 
-    eval_script = os.path.join(ACFL_ROOT, "evaluate_acfl.py")
+    eval_script = os.path.join(ACFL_ROOT, "scripts", "evaluate_acfl.py")
     if os.path.isfile(eval_script):
         out_json = os.path.join(sc_out, "acfl_evaluation.json")
         cmd = [
@@ -790,7 +790,7 @@ def main():
 
     if args.drone:
         try:
-            rc = _run([PYTHON, os.path.join(ACFL_ROOT, "estimate_drone_resources.py"),
+            rc = _run([PYTHON, os.path.join(ACFL_ROOT, "scripts", "estimate_drone_resources.py"),
                        "--config", "config_classification_drone"], timeout=30)
             report["drone_resource_estimate"] = {"ok": rc == 0}
         except Exception as e:
@@ -822,7 +822,7 @@ def main():
         l3_config = "config_classification_drone" if args.drone else "auto"
         probe_path = os.path.join(CHECKPOINT_DIR, "acfl_probes_sitl.pt")
         l3_cmd = [
-            PYTHON, "evaluate_layer3_sitl.py",
+            PYTHON, os.path.join(ACFL_ROOT, "scripts", "evaluate_layer3_sitl.py"),
             "--data-dir", SITL_PKT,
             "--config", l3_config,
             "--checkpoint", ckpt,

@@ -83,7 +83,7 @@ def main() -> None:
         try:
             cmd = [
                 str(ROOT / "acfl_env" / "bin" / "python"),
-                str(ROOT / "evaluate_layer3_sitl.py"),
+                str(ROOT / "scripts" / "evaluate_layer3_sitl.py"),
                 "--data-dir",
                 str(DATA_DIR),
                 "--config",

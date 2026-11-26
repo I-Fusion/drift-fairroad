@@ -4,11 +4,13 @@ import importlib
 import os
 import sys
 
-_ROOT = os.path.dirname(os.path.abspath(__file__))
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+_ROOT = os.path.dirname(_SCRIPT_DIR)
 FL_TS = os.path.join(_ROOT, "fl-time-series")
 if not os.path.isdir(FL_TS):
     FL_TS = os.path.join(_ROOT, "drift-fairroad", "fl-time-series")
 sys.path.insert(0, FL_TS)
+sys.path.insert(0, _ROOT)
 
 
 def _load_config(name: str):

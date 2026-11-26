@@ -26,7 +26,7 @@ DEFAULT_DATA = DRIFT_ROOT / "data/sitl_dataset/fl/packets"
 DEFAULT_OUT = ROOT / "evaluation_results/comprehensive_validation/layer3_operational_metrics.json"
 DEFAULT_TEX = ROOT / "docs/manuscript/layer3_operational_stats.tex"
 DEFAULT_TABLES_TEX = ROOT / "docs/manuscript/tables.tex"
-DEFAULT_LAYER3_EVAL = ROOT / "evaluate_layer3_sitl.py"
+DEFAULT_LAYER3_EVAL = ROOT / "scripts" / "evaluate_layer3_sitl.py"
 
 
 def _fmt(value: Optional[float], digits: int = 2) -> str:

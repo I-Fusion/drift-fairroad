@@ -59,7 +59,7 @@ drift-fairroad/
 │
 ├── acfl/                      # ACFL Layers 1–3 + robust baselines
 ├── benchmarks/                # Journal / ablation harnesses (run_drone_*.py)
-├── scripts/                   # Dataset stats, MP demos, manuscript sync
+├── scripts/                   # SITL collection, eval helpers, MP demos
 │
 ├── fl-payload/                # CAE (Convolutional Autoencoder) FL
 │   ├── config.py

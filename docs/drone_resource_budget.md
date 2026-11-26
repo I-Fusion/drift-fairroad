@@ -22,17 +22,17 @@ Use `config_classification_drone.py`:
 
 ## Data collection
 
-`collect_drone_missions.sh` adds missions sized for flash budgets:
+`scripts/collect_drone_missions.sh` adds missions sized for flash budgets:
 
 - 6 missions default (~3–7 MB processed CSV each)
 - Concurrency 2 (ground station); onboard drone runs one mission at a time
-- Missions merge into **agents** via `build_agent_mission_dataset.py` (not held-out agents)
+- Missions merge into **agents** via `scripts/build_agent_mission_dataset.py` (not held-out agents)
 
 ## Estimating your deployment
 
 ```bash
-./acfl_env/bin/python estimate_drone_resources.py
-./acfl_env/bin/python estimate_drone_resources.py --config config_classification_drone --compare config_classification
+./acfl_env/bin/python scripts/estimate_drone_resources.py
+./acfl_env/bin/python scripts/estimate_drone_resources.py --config config_classification_drone --compare config_classification
 ```
 
 ## Not in scope (future work)

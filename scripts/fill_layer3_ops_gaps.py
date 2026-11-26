@@ -68,7 +68,7 @@ def main() -> int:
             continue
         side = TMP / f"{tag}.json"
         cmd = [
-            str(PYTHON), "-u", str(ROOT / "evaluate_layer3_sitl.py"),
+            str(PYTHON), "-u", str(ROOT / "scripts" / "evaluate_layer3_sitl.py"),
             "--data-dir", str(DATA_DIR),
             "--config", "config_classification_drone",
             "--checkpoint", str(ckpt),

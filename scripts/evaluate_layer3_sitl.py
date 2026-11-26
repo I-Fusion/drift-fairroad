@@ -8,7 +8,7 @@ Loads a trained global checkpoint and runs SpoofingDetector on sliding
 windows from packet (classification) or GPS/IMU (regression) client files.
 
 Usage:
-    python3 evaluate_layer3_sitl.py \\
+    python3 scripts/evaluate_layer3_sitl.py \\
         --data-dir data/sitl_dataset/fl/packets \\
         --checkpoint fl-time-series/checkpoints/server_round_5.pt \\
         --output evaluation_results/layer3_sitl_packets.json
@@ -27,14 +27,24 @@ from sklearn.metrics import roc_auc_score, f1_score, precision_score, recall_sco
 
 
 def _resolve_repo_roots(here: str):
-    """Support flat drift-fairroad root (PR) and nested ACFL/drift-fairroad."""
-    root = os.path.dirname(os.path.abspath(here))
-    if os.path.isdir(os.path.join(root, "fl-time-series")):
-        return root, root
-    nested = os.path.join(root, "drift-fairroad")
-    if os.path.isdir(nested):
-        return root, nested
-    return root, root
+    """Locate repo root from this file (root or scripts/)."""
+    start = os.path.dirname(os.path.abspath(here))
+    root = start
+    for _ in range(5):
+        if os.path.isdir(os.path.join(root, "fl-time-series")):
+            return root, root
+        nested = os.path.join(root, "drift-fairroad")
+        if os.path.isdir(os.path.join(nested, "fl-time-series")):
+            return root, nested
+        parent = os.path.dirname(root)
+        if parent == root:
+            break
+        root = parent
+    if os.path.basename(start) == "scripts":
+        root = os.path.dirname(start)
+        if os.path.isdir(os.path.join(root, "fl-time-series")):
+            return root, root
+    return start, start
 
 
 def _resolve_python(repo_root: str) -> str:

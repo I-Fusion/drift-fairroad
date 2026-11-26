@@ -5,17 +5,17 @@
 # Each mission ≈ 3–7 MB processed CSVs; 6 missions ≈ 30–45 MB added to dataset.
 #
 # After collection, missions are merged into agents (not separate eval agents):
-#   python3 build_agent_mission_dataset.py \
+#   python3 scripts/build_agent_mission_dataset.py \
 #     --train-runs data/sitl_dataset/runs \
 #     --extra-runs data/sitl_drone_extra/runs \
 #     --output data/sitl_dataset/fl/packets --clean
 #
 # Usage (from drift-fairroad repo root):
-#   bash collect_drone_missions.sh
-#   NUM_DRONE_MISSIONS=8 bash collect_drone_missions.sh
+#   bash scripts/collect_drone_missions.sh
+#   NUM_DRONE_MISSIONS=8 bash scripts/collect_drone_missions.sh
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 if [[ -x "${REPO_ROOT}/acfl_env/bin/python" ]]; then
   PYTHON="${REPO_ROOT}/acfl_env/bin/python"
 elif [[ -x "${REPO_ROOT}/fl_env/bin/python" ]]; then
@@ -75,7 +75,7 @@ echo ""
 echo "Drone extra dataset ready:"
 echo "  runs: ${DATA_ROOT}/runs/"
 echo "  Merge into agents:"
-echo "    python3 build_agent_mission_dataset.py \\"
+echo "    python3 scripts/build_agent_mission_dataset.py \\"
 echo "      --train-runs data/sitl_dataset/runs \\"
 echo "      --extra-runs data/sitl_validate/runs \\"
 echo "      --extra-runs ${DATA_ROOT}/runs \\"
