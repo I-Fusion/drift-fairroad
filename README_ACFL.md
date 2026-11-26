@@ -65,26 +65,27 @@ python run_acfl_system.py \
 
 ## Reproduce main results
 
-Raw SITL flight data and experiment checkpoints are **not** shipped in git
-(large artifacts). Obtain them either by download or by regenerating locally,
-then run the benchmark. The FL matrix (3 attacks × 5 defenders × 10 seeds ×
-12 rounds) is long — start with a smoke subset if needed.
+Raw SITL flight data is **not** shipped in git (large artifacts). Get the
+dataset from Google Drive or regenerate it locally, then run the benchmark to
+produce checkpoints and result JSONs. The FL matrix (3 attacks × 5 defenders ×
+10 seeds × 12 rounds) is long — start with a smoke subset if needed.
 
-### Dataset and checkpoints
+### Dataset
 
-**Option A — download** (recommended for reproducing published numbers):
+**Option A — download** (SITL / FL packet data only):
 
 [Google Drive folder](https://drive.google.com/drive/folders/1hMjufuT59FY8nTBZa711rrNGvbukMK4S?usp=sharing)
 
-Place the contents so the repo sees:
+Unpack under the repo so paths look like:
 
 | Path | Contents |
 |------|----------|
 | `data/sitl_dataset/` | Primary SITL runs + `fl/packets/` agent–mission layout |
-| `data/sitl_validate/` | Validate batch runs (if included in the pack) |
-| `data/sitl_drone_extra/` | Supplemental drone missions (if included) |
-| `evaluation_results/` | Main results / ablation checkpoints and JSON summaries (if included) |
-| `fl-time-series/checkpoints/` | Probe sets / working FL checkpoints (if included) |
+| `data/sitl_validate/` | Validate batch runs (if present in the pack) |
+| `data/sitl_drone_extra/` | Supplemental drone missions (if present) |
+
+Checkpoints and `evaluation_results/` are **not** on Drive — regenerate them
+with the journal / ablation harnesses below.
 
 **Option B — generate** with the collection scripts below (needs ArduPilot SITL;
 wall-clock is hours).
