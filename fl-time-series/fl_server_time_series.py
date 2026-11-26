@@ -133,7 +133,10 @@ class FLServerTimeSeries:
 
         # Load model dynamically from config
         logger.info(f"Loading model from {config.MODEL_PATH}.{config.MODEL_CLASS}")
-        #print(f"[SERVER DEBUG] Loading model from {config.MODEL_PATH}.{config.MODEL_CLASS}")
+        from fl_reproducibility import get_fl_seed, set_fl_seed
+        base_seed = get_fl_seed()
+        if base_seed is not None:
+            set_fl_seed(base_seed)
         model_module = importlib.import_module(config.MODEL_PATH)
         model_class = getattr(model_module, config.MODEL_CLASS)
 
@@ -162,6 +165,7 @@ class FLServerTimeSeries:
         self.client_modes = {}  # Track learning mode per client
         self.registered_clients = set()
         self.ready_clients = set()
+        self.completed_clients: set = set()
         self.round_lock = asyncio.Lock()
 
         # Loss tracking for plotting
@@ -282,12 +286,21 @@ class FLServerTimeSeries:
                 print(f"[SERVER DEBUG] Round {requested_round} ready! (waited {wait_count}s)")
 
         logger.info(f"Serializing model weights for {client_id} (round {self.current_round})...")
-        #print(f"[SERVER DEBUG] Serializing model weights for {client_id} (round {self.current_round})...")
         start_serialize = time.time()
-        weights_bytes = pickle.dumps(self.model.get_weights())
+        from fl_comm import (
+            is_gzip_payload,
+            serialize_weights,
+            transfer_settings_from_config,
+        )
+        use_fp16, use_gzip = transfer_settings_from_config(config)
+        weights_bytes = serialize_weights(
+            self.model.get_weights(), use_fp16=use_fp16, compress=use_gzip,
+        )
         serialize_time = time.time() - start_serialize
-        logger.info(f"  Model serialized in {serialize_time:.3f}s ({len(weights_bytes) / 1024 / 1024:.2f} MB)")
-        #print(f"[SERVER DEBUG] Model serialized: {serialize_time:.3f}s, {len(weights_bytes) / 1024 / 1024:.2f} MB")
+        logger.info(
+            "  Model serialized in %.3fs (%.1f KB, fp16=%s gzip=%s)",
+            serialize_time, len(weights_bytes) / 1024.0, use_fp16, use_gzip,
+        )
         
         # Reset operation status
         self.current_operation = "idle"
@@ -313,6 +326,8 @@ class FLServerTimeSeries:
         num_samples = int(request.headers.get("X-Num-Samples", 0))
         loss = float(request.headers.get("X-Loss", 0.0))
         client_mode = request.headers.get("X-Learning-Mode", None)  # Optional header
+        if request.headers.get("X-Session-Complete", "0") == "1" and client_id:
+            self.completed_clients.add(client_id)
         #print(f"[SERVER DEBUG] Submit update: client_id={client_id}, num_samples={num_samples}, loss={loss:.6f}, client_mode={client_mode}")
 
         if client_id not in self.registered_clients:
@@ -334,12 +349,13 @@ class FLServerTimeSeries:
         #print(f"[SERVER DEBUG] Received {len(weights_bytes) / 1024 / 1024:.2f} MB in {read_time:.3f}s")
         
         try:
-            #print(f"[SERVER DEBUG] Deserializing weights from {client_id}...")
             start_deserialize = time.time()
-            client_weights = pickle.loads(weights_bytes)
+            from fl_comm import deserialize_weights, is_gzip_payload
+            client_weights = deserialize_weights(
+                weights_bytes, compressed=is_gzip_payload(weights_bytes),
+            )
             deserialize_time = time.time() - start_deserialize
             logger.info(f"  Deserialized weights in {deserialize_time:.3f}s")
-            #print(f"[SERVER DEBUG] Deserialized weights in {deserialize_time:.3f}s")
         except Exception as e:
             logger.error(f"Error deserializing weights from {client_id}: {e}")
             #print(f"[SERVER DEBUG] ERROR deserializing weights: {e}")
@@ -379,9 +395,19 @@ class FLServerTimeSeries:
             )
             #print(f"[SERVER DEBUG] Update stored: {client_id}{mode_str}, loss={loss:.6f}, ready={len(self.ready_clients)}/{len(self.registered_clients)}")
 
-            # Aggregate when ALL registered clients are ready
-            #print(f"[SERVER DEBUG] Checking aggregation condition: ready={len(self.ready_clients)}, registered={len(self.registered_clients)}")
-            if len(self.ready_clients) >= len(self.registered_clients):
+            # Aggregate when enough active clients have submitted (min_clients),
+            # without waiting forever for slow or finished clients.
+            active_clients = self.registered_clients - self.completed_clients
+            required = min(self.min_clients, len(active_clients)) if active_clients else 0
+            can_aggregate = (
+                required > 0
+                and len(self.ready_clients) >= required
+                and (
+                    len(self.ready_clients) >= len(active_clients)
+                    or len(self.ready_clients) >= self.min_clients
+                )
+            )
+            if can_aggregate:
                 #print(f"[SERVER DEBUG] *** ALL CLIENTS READY - STARTING AGGREGATION ***")
                 # Track loss for plotting BEFORE aggregation
                 for cid in self.client_losses:
@@ -537,10 +563,21 @@ class FLServerTimeSeries:
             "round": self.current_round,
             "model_state_dict": self.model.state_dict(),
             "learning_mode": self.learning_mode,
+            "input_size": self.input_size,
             "output_size": self.output_size
         }
         torch.save(checkpoint, path)
         logger.info(f"Checkpoint saved: {path}")
+        keep = int(getattr(config, "SERVER_CHECKPOINT_KEEP_LAST", 0))
+        if keep > 0:
+            import glob as _glob
+            files = sorted(_glob.glob(f"{config.CHECKPOINT_DIR}/server_round_*.pt"))
+            for old in files[:-keep]:
+                try:
+                    os.remove(old)
+                    logger.info("Pruned old checkpoint: %s", old)
+                except OSError:
+                    pass
 
     def save_loss_plot(self):
         """Save loss plot for all clients and average loss."""
@@ -667,7 +704,8 @@ def main():
     parser.add_argument("--num-clients", type=int, default=3, help="Expected number of clients")
     parser.add_argument("--min-clients", type=int, default=2, help="Minimum clients to start training")
     parser.add_argument("--aggregation", default="fedavg", 
-                       choices=['fedavg', 'fedavgm', 'weighted'],
+                       choices=['fedavg', 'fedavgm', 'weighted',
+                                'coordinate_median', 'trimmed_mean', 'krum'],
                        help="Aggregation strategy")
     parser.add_argument("--output-size", type=int, default=None,
                        help="Model output size (None = auto-detect)")

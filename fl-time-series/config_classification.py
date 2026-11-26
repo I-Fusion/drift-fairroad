@@ -46,6 +46,21 @@ SAMPLING_STRATEGY = 'downsample'
 # Enable supervised learning (use labels)
 USE_LABELS = True
 
+# Window-level class balancing (training only; packet timeline and eval stay unchanged)
+OVERSAMPLE_ATTACK_WINDOWS = True
+TARGET_ATTACK_WINDOW_RATIO = 0.25
+
+# Temporal train/eval split (per mission): first (1-TEST_SPLIT) windows for FL training
+TEMPORAL_TRAIN_SPLIT = True
+TEST_SPLIT = 0.2
+
+# Eval: last N missions per agent are held out entirely for eval (all windows).
+# Single-mission agents use post-attack split instead (eval from first attack onward).
+EVAL_HELDOUT_MISSIONS = 1
+
+# Local training intensity (per FL round chunk)
+LOCAL_EPOCHS = 3
+
 # ============================================================================
 # WINDOW CONFIGURATION
 # ============================================================================
@@ -53,7 +68,7 @@ USE_LABELS = True
 # Sliding window parameters
 WINDOW_SIZE = 50        # Number of timesteps per window
 OVERLAP = 25            # Number of overlapping timesteps
-WINDOWS_PER_ROUND = 10  # Windows to process before syncing with server
+WINDOWS_PER_ROUND = 32  # Windows to process before syncing with server
 
 # ============================================================================
 # FEDERATED LEARNING CONFIGURATION
@@ -115,6 +130,12 @@ def print_config():
     print(f"  Packet Timestamp Column: {PACKET_TIMESTAMP_COL}")
     print(f"  Label Column: {LABEL_COL}")
     print(f"  Use Labels: {USE_LABELS}")
+    print(f"  Oversample Attack Windows: {OVERSAMPLE_ATTACK_WINDOWS}")
+    if OVERSAMPLE_ATTACK_WINDOWS:
+        print(f"  Target Attack Window Ratio: {TARGET_ATTACK_WINDOW_RATIO:.0%}")
+    print(f"  Temporal Train Split: {TEMPORAL_TRAIN_SPLIT}")
+    if TEMPORAL_TRAIN_SPLIT:
+        print(f"  Train / Eval Window Split: {1.0 - TEST_SPLIT:.0%} / {TEST_SPLIT:.0%}")
     print(f"\nWINDOW:")
     print(f"  Window Size: {WINDOW_SIZE}")
     print(f"  Overlap: {OVERLAP}")

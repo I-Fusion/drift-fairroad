@@ -1,0 +1,113 @@
+\begin{table*}[t]
+\centering
+\caption{Layer~3 rank metrics on held-out SITL missions, split by operational network attack (waypoint injection vs.\ GNSS spoofing) and by the learning-plane poison that produced the checkpoint. Means $\pm$ std over seeds 42--51. AUROC and F1 use $P(\text{attack})$ at the per-checkpoint F1-tuned threshold. Bold marks the highest mean within an attack.}
+\label{tab:layer3-stratified}
+\scriptsize
+\setlength{\tabcolsep}{3pt}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{llcccc}
+\toprule
+Learning-plane poison & Checkpoint & Waypoint AUROC & GNSS AUROC & Waypoint F1 & GNSS F1 \\
+\midrule
+\multirow{2}{*}{Benign} & FedAvg & 0.965 $\pm$ 0.013 & 0.987 $\pm$ 0.010 & 0.873 $\pm$ 0.070 & \textbf{0.933 $\pm$ 0.015} \\
+ & ACFL (full) & \textbf{0.973 $\pm$ 0.012} & \textbf{0.988 $\pm$ 0.011} & \textbf{0.912 $\pm$ 0.036} & 0.931 $\pm$ 0.014 \\
+\midrule
+\multirow{7}{*}{Byzantine} & FedAvg & 0.563 $\pm$ 0.152 & 0.507 $\pm$ 0.242 & 0.213 $\pm$ 0.135 & 0.385 $\pm$ 0.254 \\
+ & Layer~1 only & \textbf{0.881 $\pm$ 0.071} & \textbf{0.889 $\pm$ 0.095} & 0.707 $\pm$ 0.146 & 0.810 $\pm$ 0.169 \\
+ & Layer~2 only & 0.850 $\pm$ 0.105 & 0.880 $\pm$ 0.125 & 0.614 $\pm$ 0.267 & \textbf{0.814 $\pm$ 0.202} \\
+ & Coord.\ median & 0.504 $\pm$ 0.028 & 0.625 $\pm$ 0.060 & 0.038 $\pm$ 0.035 & 0.425 $\pm$ 0.092 \\
+ & Trimmed mean & 0.499 $\pm$ 0.016 & 0.597 $\pm$ 0.078 & 0.075 $\pm$ 0.046 & 0.351 $\pm$ 0.119 \\
+ & Krum & 0.533 $\pm$ 0.139 & 0.552 $\pm$ 0.145 & 0.141 $\pm$ 0.064 & 0.334 $\pm$ 0.166 \\
+ & ACFL (full) & 0.858 $\pm$ 0.092 & 0.862 $\pm$ 0.144 & \textbf{0.713 $\pm$ 0.209} & 0.784 $\pm$ 0.203 \\
+\midrule
+\multirow{7}{*}{Grad.\ scaling} & FedAvg & 0.844 $\pm$ 0.197 & 0.892 $\pm$ 0.207 & 0.613 $\pm$ 0.324 & 0.792 $\pm$ 0.295 \\
+ & Layer~1 only & \textbf{0.957 $\pm$ 0.015} & \textbf{0.966 $\pm$ 0.019} & 0.878 $\pm$ 0.055 & \textbf{0.916 $\pm$ 0.033} \\
+ & Layer~2 only & 0.950 $\pm$ 0.026 & 0.963 $\pm$ 0.019 & 0.871 $\pm$ 0.071 & 0.911 $\pm$ 0.028 \\
+ & Coord.\ median & 0.643 $\pm$ 0.070 & 0.827 $\pm$ 0.131 & 0.215 $\pm$ 0.127 & 0.614 $\pm$ 0.216 \\
+ & Trimmed mean & 0.688 $\pm$ 0.025 & 0.850 $\pm$ 0.058 & 0.257 $\pm$ 0.099 & 0.534 $\pm$ 0.111 \\
+ & Krum & 0.546 $\pm$ 0.146 & 0.549 $\pm$ 0.155 & 0.184 $\pm$ 0.238 & 0.304 $\pm$ 0.225 \\
+ & ACFL (full) & 0.953 $\pm$ 0.021 & 0.964 $\pm$ 0.020 & \textbf{0.879 $\pm$ 0.070} & 0.907 $\pm$ 0.035 \\
+\midrule
+\multirow{7}{*}{Backdoor} & FedAvg & 0.969 $\pm$ 0.015 & 0.988 $\pm$ 0.007 & 0.905 $\pm$ 0.049 & 0.940 $\pm$ 0.016 \\
+ & Layer~1 only & \textbf{0.972 $\pm$ 0.012} & 0.989 $\pm$ 0.009 & 0.916 $\pm$ 0.032 & \textbf{0.942 $\pm$ 0.016} \\
+ & Layer~2 only & 0.966 $\pm$ 0.012 & 0.987 $\pm$ 0.012 & 0.893 $\pm$ 0.038 & 0.935 $\pm$ 0.016 \\
+ & Coord.\ median & 0.500 $\pm$ 0.063 & 0.530 $\pm$ 0.091 & 0.124 $\pm$ 0.020 & 0.279 $\pm$ 0.060 \\
+ & Trimmed mean & 0.501 $\pm$ 0.055 & 0.516 $\pm$ 0.067 & 0.120 $\pm$ 0.017 & 0.261 $\pm$ 0.044 \\
+ & Krum & 0.970 $\pm$ 0.011 & \textbf{0.991 $\pm$ 0.006} & \textbf{0.919 $\pm$ 0.018} & 0.940 $\pm$ 0.011 \\
+ & ACFL (full) & 0.969 $\pm$ 0.010 & 0.988 $\pm$ 0.010 & 0.902 $\pm$ 0.040 & 0.937 $\pm$ 0.010 \\
+\midrule
+\multirow{7}{*}{Label flip} & FedAvg & 0.830 $\pm$ 0.103 & 0.808 $\pm$ 0.155 & 0.563 $\pm$ 0.262 & 0.669 $\pm$ 0.219 \\
+ & Layer~1 only & \textbf{0.957 $\pm$ 0.017} & \textbf{0.953 $\pm$ 0.026} & \textbf{0.896 $\pm$ 0.032} & \textbf{0.900 $\pm$ 0.033} \\
+ & Layer~2 only & 0.913 $\pm$ 0.084 & 0.685 $\pm$ 0.309 & 0.744 $\pm$ 0.211 & 0.567 $\pm$ 0.360 \\
+ & Coord.\ median & 0.435 $\pm$ 0.052 & 0.436 $\pm$ 0.061 & 0.111 $\pm$ 0.006 & 0.241 $\pm$ 0.015 \\
+ & Trimmed mean & 0.441 $\pm$ 0.065 & 0.446 $\pm$ 0.067 & 0.115 $\pm$ 0.015 & 0.243 $\pm$ 0.020 \\
+ & Krum & 0.809 $\pm$ 0.132 & 0.633 $\pm$ 0.299 & 0.579 $\pm$ 0.277 & 0.507 $\pm$ 0.267 \\
+ & ACFL (full) & 0.903 $\pm$ 0.056 & 0.897 $\pm$ 0.084 & 0.746 $\pm$ 0.215 & 0.779 $\pm$ 0.168 \\
+\midrule
+\multirow{7}{*}{Model repl.} & FedAvg & 0.434 $\pm$ 0.151 & 0.410 $\pm$ 0.191 & 0.109 & 0.233 \\
+ & Layer~1 only & 0.487 $\pm$ 0.210 & 0.123 $\pm$ 0.117 & 0.191 $\pm$ 0.176 & 0.212 $\pm$ 0.076 \\
+ & Layer~2 only & 0.728 $\pm$ 0.284 & 0.607 $\pm$ 0.386 & 0.439 $\pm$ 0.294 & 0.548 $\pm$ 0.308 \\
+ & Coord.\ median & 0.500 & 0.500 & 0.109 & 0.233 \\
+ & Trimmed mean & 0.500 & 0.500 & 0.109 & 0.233 \\
+ & Krum & 0.457 $\pm$ 0.135 & 0.454 $\pm$ 0.147 & 0.109 & 0.233 \\
+ & ACFL (full) & \textbf{0.772 $\pm$ 0.212} & \textbf{0.643 $\pm$ 0.313} & \textbf{0.533 $\pm$ 0.308} & \textbf{0.558 $\pm$ 0.265} \\
+\bottomrule
+\end{tabular}}
+\end{table*}
+
+\begin{table*}[t]
+\centering
+\caption{Layer~3 operational metrics for the same checkpoints. Time-to-detect is the mean delay from labeled onset on that network attack; a parenthetical count is the number of seeds that caught at least one onset, and the cell is blank unless all ten reports stored the operational block. FA/hr is false alarms per operating hour on benign (no-network-attack) missions, blank unless all ten seeds recorded it. Bold marks the lowest mean FA/hr within an attack. CPU runtime is the shared TinyPacketCNN forward pass (10 sequential repeats, 122 windows each): mean 1.59\,ms per window, p95 6.20\,ms. It does not depend on the aggregation checkpoint.}
+\label{tab:layer3-stratified-ops}
+\scriptsize
+\setlength{\tabcolsep}{3pt}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{llccc}
+\toprule
+Learning-plane poison & Checkpoint & Waypoint TTD (s) & GNSS TTD (s) & FA/hr \\
+\midrule
+\multirow{2}{*}{Benign} & FedAvg & 0.91 $\pm$ 0.51 & 1.08 $\pm$ 0.16 & 6.2 $\pm$ 6.0 \\
+ & ACFL (full) & 0.65 $\pm$ 0.14 & 1.16 $\pm$ 0.25 & \textbf{4.4 $\pm$ 4.7} \\
+\midrule
+\multirow{7}{*}{Byzantine} & FedAvg & 1.32 $\pm$ 1.71 & 2.98 $\pm$ 6.52 & 1472.4 $\pm$ 1643.2 \\
+ & Layer~1 only & 1.35 $\pm$ 0.51 & 1.97 $\pm$ 1.21 & \textbf{9.8 $\pm$ 16.5} \\
+ & Layer~2 only & 1.48 $\pm$ 0.88 & 1.99 $\pm$ 1.85 & 44.6 $\pm$ 83.0 \\
+ & Coord.\ median & 0.70 $\pm$ 0.54\,{\scriptsize(6)} & 1.45 $\pm$ 0.76 & 70.3 $\pm$ 145.8 \\
+ & Trimmed mean & 0.40 $\pm$ 0.55\,{\scriptsize(8)} & 1.18 $\pm$ 0.64 & 665.4 $\pm$ 1402.9 \\
+ & Krum & 0.42 $\pm$ 1.31 & 2.11 $\pm$ 5.23 & 2270.0 $\pm$ 1570.2 \\
+ & ACFL (full) & 1.05 $\pm$ 0.36 & 1.85 $\pm$ 1.95 & 32.0 $\pm$ 79.8 \\
+\midrule
+\multirow{7}{*}{Grad.\ scaling} & FedAvg & 0.71 $\pm$ 0.74 & 0.88 $\pm$ 0.56 & 677.0 $\pm$ 1396.9 \\
+ & Layer~1 only & 0.57 $\pm$ 0.21 & 1.19 $\pm$ 0.75 & 3.6 $\pm$ 4.6 \\
+ & Layer~2 only & 0.76 $\pm$ 0.34 & 1.39 $\pm$ 0.75 & \textbf{1.8 $\pm$ 3.8} \\
+ & Coord.\ median & 0.79 $\pm$ 0.70 & 2.57 $\pm$ 1.32 & 843.5 $\pm$ 1171.6 \\
+ & Trimmed mean & 0.34 $\pm$ 0.65 & 3.55 $\pm$ 4.41 & 1022.3 $\pm$ 880.3 \\
+ & Krum & 0.10 $\pm$ 0.33 & 0.08 $\pm$ 0.24 & 2996.3 $\pm$ 1046.5 \\
+ & ACFL (full) & 0.81 $\pm$ 0.60 & 1.47 $\pm$ 0.70 & \textbf{1.8 $\pm$ 3.8} \\
+\midrule
+\multirow{7}{*}{Backdoor} & FedAvg & 0.60 $\pm$ 0.25 & 0.88 $\pm$ 0.33 & 8.0 $\pm$ 2.8 \\
+ & Layer~1 only & 0.50 $\pm$ 0.08 & 1.01 $\pm$ 0.35 & \textbf{3.6 $\pm$ 4.6} \\
+ & Layer~2 only & 0.60 $\pm$ 0.18 & 1.08 $\pm$ 0.32 & 7.1 $\pm$ 5.6 \\
+ & Coord.\ median & 0.17 $\pm$ 0.18 & 2.30 $\pm$ 2.94 & 2500.0 $\pm$ 872.0 \\
+ & Trimmed mean & 0.14 $\pm$ 0.18 & 1.76 $\pm$ 2.97 & 2661.9 $\pm$ 859.1 \\
+ & Krum & 0.52 $\pm$ 0.00 & 1.06 $\pm$ 0.28 & 7.1 $\pm$ 8.2 \\
+ & ACFL (full) & 0.65 $\pm$ 0.25 & 1.11 $\pm$ 0.32 & \textbf{3.6 $\pm$ 4.6} \\
+\midrule
+\multirow{7}{*}{Label flip} & FedAvg & 1.41 $\pm$ 1.17 & 3.50 $\pm$ 3.29 & 2.7 $\pm$ 8.4 \\
+ & Layer~1 only & 0.60 $\pm$ 0.28 & 1.49 $\pm$ 0.67 & \textbf{1.8 $\pm$ 3.8} \\
+ & Layer~2 only & 0.51 $\pm$ 0.28 & 17.85 $\pm$ 41.88 & 81.8 $\pm$ 191.8 \\
+ & Coord.\ median & 0.07 $\pm$ 0.15 & 1.03 $\pm$ 2.60 & 2992.8 $\pm$ 705.1 \\
+ & Trimmed mean & 0.07 $\pm$ 0.15 & 1.61 $\pm$ 3.39 & 2992.8 $\pm$ 705.1 \\
+ & Krum & 0.49 $\pm$ 0.34 & 15.31 $\pm$ 41.49 & 521.4 $\pm$ 1124.2 \\
+ & ACFL (full) & 0.89 $\pm$ 0.66 & 2.93 $\pm$ 3.61 & 36.7 $\pm$ 103.7 \\
+\midrule
+\multirow{7}{*}{Model repl.} & FedAvg & 0.00 & 0.00 & 3327.2 \\
+ & Layer~1 only & 0.32 $\pm$ 0.74 & 0.40 $\pm$ 1.03\,{\scriptsize(9)} & 2503.5 $\pm$ 1378.8 \\
+ & Layer~2 only & 1.31 $\pm$ 1.53 & 2.09 $\pm$ 2.69 & 1002.6 $\pm$ 1604.2 \\
+ & Coord.\ median & 0.00 & 0.00 & 3327.2 \\
+ & Trimmed mean & 0.00 & 0.00 & 3327.2 \\
+ & Krum & 0.00 & 0.00 & 3327.2 \\
+ & ACFL (full) & 0.92 $\pm$ 0.84 & 3.58 $\pm$ 3.32 & \textbf{816.6 $\pm$ 1392.4} \\
+\bottomrule
+\end{tabular}}
+\end{table*}

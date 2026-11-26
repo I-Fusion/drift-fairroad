@@ -20,6 +20,191 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+def oversample_attack_windows(
+    X: np.ndarray,
+    y: np.ndarray,
+    target_attack_ratio: float = 0.25,
+    seed: int = 42,
+) -> Tuple[np.ndarray, np.ndarray, dict]:
+    """
+    Duplicate attack-labeled windows to approach a target class ratio.
+
+    All original windows are kept once (full timeline preserved at window level).
+    Only positive windows are resampled with replacement; order is shuffled for training.
+
+    Args:
+        X: Window array (num_windows, window_size, num_features)
+        y: Labels (num_windows,)
+        target_attack_ratio: Desired fraction of attack windows after oversampling
+        seed: RNG seed for reproducible duplicate selection and shuffle
+
+    Returns:
+        X_out, y_out, stats dict
+    """
+    y_flat = np.asarray(y).reshape(-1)
+    n = len(y_flat)
+    if n == 0:
+        return X, y, {"applied": False, "reason": "empty"}
+
+    if not 0.0 < target_attack_ratio < 1.0:
+        raise ValueError("target_attack_ratio must be in (0, 1)")
+
+    pos_idx = np.flatnonzero(y_flat >= 0.5)
+    neg_idx = np.flatnonzero(y_flat < 0.5)
+    n_pos, n_neg = len(pos_idx), len(neg_idx)
+
+    base_stats = {
+        "applied": False,
+        "windows_before": n,
+        "attack_before": int(n_pos),
+        "attack_ratio_before": float(n_pos / n) if n else 0.0,
+    }
+    if n_pos == 0 or n_neg == 0:
+        base_stats["reason"] = "single_class"
+        return X, y, base_stats
+
+    desired_pos = int(round(n_neg * target_attack_ratio / (1.0 - target_attack_ratio)))
+    desired_pos = max(desired_pos, n_pos)
+
+    rng = np.random.default_rng(seed)
+    indices = np.arange(n, dtype=np.int64)
+    if desired_pos > n_pos:
+        extra = rng.choice(pos_idx, size=desired_pos - n_pos, replace=True)
+        indices = np.concatenate([indices, extra])
+    rng.shuffle(indices)
+
+    X_out = X[indices]
+    y_out = y_flat[indices]
+    n_pos_after = int((y_out >= 0.5).sum())
+    stats = {
+        **base_stats,
+        "applied": desired_pos > n_pos,
+        "windows_after": len(y_out),
+        "attack_after": n_pos_after,
+        "attack_ratio_after": float(n_pos_after / len(y_out)),
+        "duplicates_added": max(0, len(y_out) - n),
+        "target_attack_ratio": target_attack_ratio,
+    }
+    if stats["applied"]:
+        logger.info(
+            "Oversampled attack windows: %d -> %d windows, attack %.1f%% -> %.1f%% "
+            "(+%d duplicates, target=%.0f%%)",
+            n, len(y_out),
+            100.0 * stats["attack_ratio_before"],
+            100.0 * stats["attack_ratio_after"],
+            stats["duplicates_added"],
+            100.0 * target_attack_ratio,
+        )
+    return X_out, y_out, stats
+
+
+def split_temporal_windows(
+    X: np.ndarray,
+    y: np.ndarray,
+    test_split: float = 0.2,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, dict]:
+    """
+    Split window arrays into chronological train (prefix) and eval (suffix) portions.
+
+    Args:
+        X: (num_windows, window_size, features)
+        y: (num_windows,)
+        test_split: Fraction of windows reserved for eval (suffix)
+
+    Returns:
+        X_train, y_train, X_test, y_test, stats
+    """
+    y_flat = np.asarray(y).reshape(-1)
+    n = len(y_flat)
+    if n == 0:
+        empty = np.array([])
+        return X, y, empty, empty, {"applied": False, "reason": "empty"}
+
+    n_test = int(n * test_split)
+    n_train = n - n_test
+    if n_test <= 0 or n_train <= 0:
+        return (
+            X, y_flat, np.array([]), np.array([]),
+            {
+                "applied": False,
+                "reason": "insufficient_windows",
+                "windows_total": n,
+                "test_split": test_split,
+            },
+        )
+
+    X_train, y_train = X[:n_train], y_flat[:n_train]
+    X_test, y_test = X[n_train:], y_flat[n_train:]
+    stats = {
+        "applied": True,
+        "windows_total": n,
+        "windows_train": n_train,
+        "windows_test": n_test,
+        "test_split": test_split,
+        "train_attack_ratio": float((y_train >= 0.5).mean()),
+        "test_attack_ratio": float((y_test >= 0.5).mean()),
+    }
+    logger.info(
+        "Temporal window split: train=%d (attack %.1f%%), test=%d (attack %.1f%%)",
+        n_train, 100.0 * stats["train_attack_ratio"],
+        n_test, 100.0 * stats["test_attack_ratio"],
+    )
+    return X_train, y_train, X_test, y_test, stats
+
+
+def split_post_attack_windows(
+    X: np.ndarray,
+    y: np.ndarray,
+    fallback_test_split: float = 0.2,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, dict]:
+    """
+    Split at the first attack window: train = prefix before attack, eval = attack onward.
+
+    Ensures eval contains attack labels when attacks occur mid-mission (unlike a
+    pure temporal suffix split). Falls back to temporal suffix for benign missions.
+    """
+    y_flat = np.asarray(y).reshape(-1)
+    n = len(y_flat)
+    if n == 0:
+        empty = np.array([])
+        return X, y, empty, empty, {"applied": False, "reason": "empty", "mode": "post_attack"}
+
+    pos_idx = np.flatnonzero(y_flat >= 0.5)
+    if len(pos_idx) == 0:
+        out = split_temporal_windows(X, y_flat, test_split=fallback_test_split)
+        stats = out[4]
+        stats["mode"] = "post_attack"
+        stats["fallback"] = "temporal_suffix_benign"
+        return out
+
+    k = int(pos_idx[0])
+    if k <= 0 or k >= n:
+        out = split_temporal_windows(X, y_flat, test_split=fallback_test_split)
+        stats = out[4]
+        stats["mode"] = "post_attack"
+        stats["fallback"] = "temporal_suffix_edge"
+        return out
+
+    X_train, y_train = X[:k], y_flat[:k]
+    X_test, y_test = X[k:], y_flat[k:]
+    stats = {
+        "applied": True,
+        "mode": "post_attack",
+        "windows_total": n,
+        "windows_train": k,
+        "windows_test": n - k,
+        "split_index": k,
+        "train_attack_ratio": float((y_train >= 0.5).mean()),
+        "test_attack_ratio": float((y_test >= 0.5).mean()),
+    }
+    logger.info(
+        "Post-attack window split: train=%d (attack %.1f%%), test=%d (attack %.1f%%)",
+        k, 100.0 * stats["train_attack_ratio"],
+        n - k, 100.0 * stats["test_attack_ratio"],
+    )
+    return X_train, y_train, X_test, y_test, stats
+
+
 class DataPreprocessorTimeSeries:
     """
     Handles all data preprocessing for GPS, IMU, and packet sensor fusion.
@@ -365,26 +550,34 @@ class DataPreprocessorTimeSeries:
         
         return merged_df, labels
 
-    def normalize_data(self, data: np.ndarray) -> np.ndarray:
+    def normalize_data(self, data: np.ndarray, fit_rows: Optional[int] = None) -> np.ndarray:
         """
         Normalize data using z-score normalization.
-        
+
         Args:
             data: Input data array
-        
+            fit_rows: If set, compute mean/std on data[:fit_rows] only (temporal train split)
+
         Returns:
             Normalized data
         """
-        # Calculate mean and std if not already done
         if self.feature_means is None:
-            self.feature_means = np.mean(data, axis=0)
-            self.feature_stds = np.std(data, axis=0)
-            
+            if fit_rows is not None and 0 < fit_rows < len(data):
+                fit_data = data[:fit_rows]
+                logger.info(
+                    "Fitting normalization on first %d/%d timesteps (%.0f%%)",
+                    fit_rows, len(data), 100.0 * fit_rows / len(data),
+                )
+            else:
+                fit_data = data
+            self.feature_means = np.mean(fit_data, axis=0)
+            self.feature_stds = np.std(fit_data, axis=0)
+
             # Avoid division by zero
             self.feature_stds[self.feature_stds == 0] = 1.0
-            
+
             logger.info("Computed normalization statistics")
-        
+
         # Normalize
         normalized = (data - self.feature_means) / self.feature_stds
         return normalized
@@ -468,15 +661,18 @@ class DataPreprocessorTimeSeries:
     def preprocess(
         self,
         window_size: int,
-        overlap: int
+        overlap: int,
+        norm_train_fraction: Optional[float] = None,
     ) -> Tuple[np.ndarray, np.ndarray, int]:
         """
         Full preprocessing pipeline.
-        
+
         Args:
             window_size: Size of sliding window
             overlap: Overlap between windows
-        
+            norm_train_fraction: If set, fit normalization on this fraction of
+                leading timesteps only (e.g. 0.8 for an 80/20 temporal split)
+
         Returns:
             X: Windowed input data
             y: Target data (labels if use_labels=True, else next timestep features)
@@ -508,7 +704,10 @@ class DataPreprocessorTimeSeries:
         
         # Step 3: Normalize
         logger.info("Step 3/4: Normalizing data...")
-        data = self.normalize_data(data)
+        fit_rows = None
+        if norm_train_fraction is not None and 0.0 < norm_train_fraction < 1.0:
+            fit_rows = max(1, int(len(data) * norm_train_fraction))
+        data = self.normalize_data(data, fit_rows=fit_rows)
         logger.info(f"  Normalized data shape: {data.shape}")
         
         # Step 4: Create sliding windows
@@ -523,3 +722,9 @@ class DataPreprocessorTimeSeries:
     def get_normalization_params(self) -> Tuple[np.ndarray, np.ndarray]:
         """Get normalization parameters for later use."""
         return self.feature_means, self.feature_stds
+
+    def set_normalization_params(self, means: np.ndarray, stds: np.ndarray) -> None:
+        """Apply normalization statistics from another preprocessor or shared fit."""
+        self.feature_means = np.asarray(means, dtype=np.float64).copy()
+        self.feature_stds = np.asarray(stds, dtype=np.float64).copy()
+        self.feature_stds[self.feature_stds == 0] = 1.0

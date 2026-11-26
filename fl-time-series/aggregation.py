@@ -1,9 +1,29 @@
 """
 Aggregation methods for Federated Learning
 """
+import os
+import sys
+import copy
+
 import torch
 from typing import List, Dict
-import copy
+
+_ACFL_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+if _ACFL_ROOT not in sys.path:
+    sys.path.insert(0, _ACFL_ROOT)
+
+try:
+    from acfl.robust_baselines import (
+        BASELINE_STRATEGIES,
+        coordinate_median_aggregate,
+        krum_aggregate,
+        trimmed_mean_aggregate,
+    )
+except ImportError:
+    BASELINE_STRATEGIES = frozenset()
+    coordinate_median_aggregate = None
+    krum_aggregate = None
+    trimmed_mean_aggregate = None
 
 
 class FederatedAggregator:
@@ -40,6 +60,18 @@ class FederatedAggregator:
             if client_samples is None:
                 raise ValueError("client_samples required for weighted aggregation")
             return self._weighted_avg(client_weights, client_samples)
+        elif self.strategy == "coordinate_median":
+            if coordinate_median_aggregate is None:
+                raise ValueError("coordinate_median requires acfl.robust_baselines")
+            return coordinate_median_aggregate(client_weights)
+        elif self.strategy == "trimmed_mean":
+            if trimmed_mean_aggregate is None:
+                raise ValueError("trimmed_mean requires acfl.robust_baselines")
+            return trimmed_mean_aggregate(client_weights)
+        elif self.strategy == "krum":
+            if krum_aggregate is None:
+                raise ValueError("krum requires acfl.robust_baselines")
+            return krum_aggregate(client_weights)
         else:
             raise ValueError(f"Unknown aggregation strategy: {self.strategy}")
 

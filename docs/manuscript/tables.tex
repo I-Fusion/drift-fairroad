@@ -1,0 +1,66 @@
+% Tables for the ACFL journal experiments section.
+% Requires: \usepackage{booktabs}, \usepackage{multirow}
+% Benchmark numbers: scripts/sync_manuscript_numbers.py -> tables_data.tex
+
+\input{dataset_stats}
+\input{tables_data}
+\input{significance_stats}
+
+\begin{table}[t]
+\centering
+\caption{\texttt{TinyPacketCNN} architecture and training configuration (drone profile).}
+\label{tab:model}
+\small
+\begin{tabular}{@{}p{0.32\columnwidth}p{0.62\columnwidth}@{}}
+\toprule
+Component & Setting \\
+\midrule
+\multicolumn{2}{@{}l}{\textit{Architecture}} \\
+Input window & $50 \times 5$ packets (stride 25) \\
+Conv block 1 & $\mathrm{Conv1d}(5{\rightarrow}24,\,k{=}5)$, BN, ReLU, $\mathrm{MaxPool1d}(2)$ \\
+Conv block 2 & $\mathrm{Conv1d}(24{\rightarrow}48,\,k{=}3)$, BN, ReLU \\
+Conv block 3 & $\mathrm{Conv1d}(48{\rightarrow}64,\,k{=}3)$, BN, ReLU \\
+Pooling / head & $\mathrm{AdaptiveAvgPool1d}(1)$, Dropout($p{=}0.15$), Linear($64{\rightarrow}1$) \\
+Parameters & 13{,}745 ($\approx$14k) \\
+\midrule
+\multicolumn{2}{@{}l}{\textit{Preprocessing}} \\
+Normalization & Per-agent $z$-score on train missions (80\% prefix fit) \\
+Window label & Attack if any packet in window has \texttt{Label}${=}1$ \\
+Class balance & Oversample attack windows to 25\% per agent (train only) \\
+\midrule
+\multicolumn{2}{@{}l}{\textit{Training}} \\
+Loss & \texttt{BCEWithLogitsLoss} ($\texttt{pos\_weight}=n_{\mathrm{neg}}/n_{\mathrm{pos}}$) \\
+Optimizer & Adam, learning rate $2 \times 10^{-3}$ \\
+Local schedule & 16 windows/round, 2 epochs, batch size 16 \\
+FL schedule & 12 rounds, 3 clients (min.\ 2), seeds $\{42,\ldots,51\}$ \\
+Weight transfer & FP16 + gzip ($\approx$25\,KB/round) \\
+Inference & $\hat{y}=\mathbb{1}[\sigma(\text{logit}) \geq \tau]$; $\tau{=}0.5$ (F1-tuned if better) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[t]
+\centering
+\caption{Drone FL profile and attack parameters (all experiments unless noted).}
+\label{tab:setup}
+\small
+\begin{tabular}{@{}p{0.34\columnwidth}p{0.60\columnwidth}@{}}
+\toprule
+Parameter & Value \\
+\midrule
+Dataset & SITL packet traces (agent--mission); Table~\ref{tab:dataset} \\
+Model & \texttt{TinyPacketCNN}; Table~\ref{tab:model} \\
+FL participants & 3 clients (min.\ 2/round) \\
+Malicious clients & 1 (\texttt{client\_2}, 33\%) \\
+FL rounds / seeds & 12 / \{42,\ldots,51\} \\
+Windows/epochs/batch & 16 / 2 / 16 \\
+Weight transfer & FP16 + gzip \\
+Grad.\ scaling & $10\times$ update \\
+Byzantine noise & $\sigma{=}1.0$ (seeded) \\
+Backdoor poison / scale & 35\% windows / $5\times$ \\
+Label-flip fraction & 50\% \\
+Model replacement & $10\times$ anti-direction \\
+ACFL trust $\rho$ / $T_{\min}$ & 1.25 / 0.03 \\
+\bottomrule
+\end{tabular}
+\end{table}

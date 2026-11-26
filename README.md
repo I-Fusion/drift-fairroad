@@ -2,7 +2,9 @@
 
 Federated Learning system for **time series** (GPS/IMU), **classification** (e.g. attack vs normal from packet sequences), and **payload/CAE** (image denoising) — with configurable aggregation and evaluation for cyber anomaly detection.
 
-**Convention: run all commands from the project root directory** (the folder that contains `fl-time-series/`, `fl-payload/`, `data/`, and `docker/`). Paths in examples are relative to project root.
+This tree also includes **ACFL** (Adversarially-Conditioned Federated Learning): a poisoning-resilient aggregation path and spoofing-detection layer on top of the packet FL stack. See **[`README_ACFL.md`](README_ACFL.md)** for install, manuscript reproduction, Mission Planner demos, and the ACFL Docker compose stack.
+
+**Convention: run all commands from the project root directory** (the folder that contains `fl-time-series/`, `fl-payload/`, `data/`, `acfl/`, and `docker/`). Paths in examples are relative to project root.
 
 **Requirements:** Python **3.10** (used in Docker and recommended for local runs).
 
@@ -29,6 +31,19 @@ python fl-time-series/run_fl_system_time_series.py --data-dir data/train/gps-imu
 
 For packet classification, use `--config config_classification --learning-mode classification` and a packet data dir. See **fl-time-series/README.md** for full options.
 
+For **ACFL** (TinyPacketCNN + Layers 1–3):
+
+```bash
+pip install -r requirements-acfl.txt
+python run_acfl_system.py \
+  --data-dir data/train/packets \
+  --config config_classification_drone \
+  --learning-mode classification \
+  --num-clients 3 --min-clients 2 --max-fl-rounds 12
+```
+
+Full ACFL docs: **[`README_ACFL.md`](README_ACFL.md)**.
+
 
 ## Project Structure
 
@@ -38,6 +53,13 @@ All commands below are run from **project root** (`drift-fairroad/`).
 drift-fairroad/
 ├── data/                      # CSV files and payload images
 ├── requirements.txt
+├── requirements-acfl.txt      # Extra deps for ACFL / tests
+├── README_ACFL.md             # ACFL defense, repro, demos, Docker
+├── run_acfl_system.py         # ACFL end-to-end FL runner
+│
+├── acfl/                      # ACFL Layers 1–3 + robust baselines
+├── benchmarks/                # Journal / ablation harnesses (run_drone_*.py)
+├── scripts/                   # Dataset stats, MP demos, manuscript sync
 │
 ├── fl-payload/                # CAE (Convolutional Autoencoder) FL
 │   ├── config.py
@@ -51,9 +73,10 @@ drift-fairroad/
 ├── fl-time-series/            # Classification & regression FL (packet / GPS–IMU)
 │   ├── run_fl_system_time_series.py
 │   ├── fl_server_time_series.py, fl_client_time_series.py
-│   ├── config_classification.py, config_regression.py
+│   ├── config_classification.py, config_classification_drone.py
+│   ├── config_regression.py
 │   ├── data_preprocessing_time_series.py, aggregation.py
-│   ├── models/                # Timeseries model (lstm_model.py)
+│   ├── models/                # lstm_model.py, tiny_packet_cnn.py
 │   ├── checkpoints/           # Created by FL runs
 │   ├── plots/                 # Loss plots from FL runs
 │   ├── evaluation_results/    # From evaluate_fl_system.py
@@ -62,8 +85,9 @@ drift-fairroad/
 │   └── README.md
 │
 └── docker/
-    ├── Dockerfile, Dockerfile.cae
-    ├── docker-compose.yml, docker-compose.cae.yml
+    ├── Dockerfile, Dockerfile.cae, Dockerfile.acfl
+    ├── docker-compose.yml, docker-compose.cae.yml, docker-compose.acfl.yml
+    ├── entrypoint_acfl.sh
     └── DOCKER.md
 ```
 ---
@@ -85,6 +109,8 @@ fl_env\Scripts\activate
 
 # Install dependencies
 pip install -r requirements.txt
+# Optional — ACFL defense + unit tests
+pip install -r requirements-acfl.txt
 
 # When done, deactivate
 deactivate
@@ -110,9 +136,42 @@ docker-compose -f docker/docker-compose.yml up --build
 
 # CAE FL (image denoising)
 docker-compose -f docker/docker-compose.cae.yml up --build
+
+# ACFL packet classification (port 8090)
+docker compose -f docker/docker-compose.acfl.yml up --build
 ```
 
-See **`docker/DOCKER.md`** for details (build context, volumes, troubleshooting).
+See **`docker/DOCKER.md`** for details (build context, volumes, troubleshooting). ACFL-specific compose options and attack env vars are also summarized in **[`README_ACFL.md`](README_ACFL.md)**.
+
+
+## ACFL (poisoning-resilient FL)
+
+**ACFL** adds three defense layers on the packet FL path: counterfactual update validation (L1), trust-weighted aggregation (L2), and spoofing detection (L3). The drone profile uses **TinyPacketCNN** via `config_classification_drone`.
+
+| Piece | Role |
+|-------|------|
+| `acfl/` | Defense package |
+| `run_acfl_system.py` | Launch ACFL server + clients |
+| `benchmarks/` | Manuscript journal / ablation harnesses |
+| `docker/docker-compose.acfl.yml` | Containerized 3-client demo |
+
+```bash
+# Benign drone-profile run
+python run_acfl_system.py \
+  --data-dir data/train/packets \
+  --config config_classification_drone \
+  --learning-mode classification \
+  --num-clients 3 --min-clients 2 --max-fl-rounds 12
+
+# With a malicious client (Byzantine)
+python run_acfl_system.py \
+  --data-dir data/train/packets \
+  --config config_classification_drone \
+  --learning-mode classification \
+  --malicious-clients client_2 --attack-type byzantine
+```
+
+For manuscript reproduction, SITL dataset collection, Mission Planner telemetry demos, and Docker attack knobs, see **[`README_ACFL.md`](README_ACFL.md)**.
 
 
 ## Running CAE FL (fl-payload)
